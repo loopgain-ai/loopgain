@@ -141,18 +141,36 @@ Terminal result with `outcome`, `iterations_used`, `best_index`, `best_output`, 
 **Opt-in.** Send a single anonymized telemetry POST after the loop terminates. Best-effort — never raises, returns `True` on 2xx, `False` otherwise.
 
 ```python
+import os
+from loopgain import LoopGain
+
+lg = LoopGain(target_error=0.1)
+# ... run the loop ...
 lg.send_telemetry(
-    endpoint="https://telemetry.loopgain.ai/v1/aggregate",  # or self-hosted
-    token="your-token",                                     # bearer auth
-    workload_id="my-rag-pipeline",                          # opaque label
+    endpoint=os.environ["LOOPGAIN_TELEMETRY_ENDPOINT"],   # or hardcode
+    token=os.environ["LOOPGAIN_TELEMETRY_TOKEN"],         # never hardcode
+    workload_id="my-rag-pipeline",                        # opaque label
 )
+```
+
+Recommended setup: store the token outside source. Two clean options:
+
+```bash
+# Option A: environment variable (simplest)
+export LOOPGAIN_TELEMETRY_ENDPOINT="https://telemetry.loopgain.ai/v1/aggregate"
+export LOOPGAIN_TELEMETRY_TOKEN="lgk_..."   # add to ~/.zshrc or ~/.bashrc
+
+# Option B: macOS Keychain (more secure)
+pip install keyring
+python3 -c "import keyring; keyring.set_password('loopgain', 'telemetry', input('Token: '))"
+# Then in code: keyring.get_password('loopgain', 'telemetry')
 ```
 
 What is sent: state transitions, Aβ summary (min/max/median), gain margin, rollback flag, iterations used, savings, library version, optional opaque `workload_id`, threshold config, hour-bucketed timestamp.
 
 **What is NEVER sent: prompts, completions, error contents, output buffer, individual Aβ values, or any customer identity beyond the bearer token.** Privacy contract is enforced by the payload-shape unit tests in `tests/test_telemetry.py`.
 
-The Cascade-Systems-hosted endpoint at `telemetry.loopgain.ai` is one acceptable destination; the receiver code is open-source so customers can self-host to keep telemetry fully under their control.
+The Cascade-Systems-hosted endpoint at `telemetry.loopgain.ai` is one acceptable destination; the receiver code is [open-source](https://github.com/loopgain-ai/telemetry-receiver) so customers can self-host to keep telemetry fully under their control.
 
 ---
 
