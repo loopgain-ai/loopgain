@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "loopgain"
+version = "0.1.0"
+description = "Barkhausen stability monitor for AI agent loops. Real-time loop-gain (Aβ) monitoring with five named threshold bands, best-so-far rollback, and ETA prediction."
+authors = [{name = "Dave Fitzsimmons", email = "dave_fitz@icloud.com"}]
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+keywords = [
+    "ai",
+    "agent",
+    "barkhausen",
+    "loop-stability",
+    "control-theory",
+    "feedback-loop",
+    "llm",
+    "agentic",
+    "verify-revise",
+    "convergence",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://loopgain.ai"
+Repository = "https://github.com/loopgain-ai/loopgain"
+Issues = "https://github.com/loopgain-ai/loopgain/issues"
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["loopgain*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
