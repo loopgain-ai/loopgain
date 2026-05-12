@@ -35,14 +35,14 @@ Three lines of code wrap any verify-revise loop:
 ```python
 from loopgain import LoopGain
 
-guard = LoopGain(target_error=0.1)
+lg = LoopGain(target_error=0.1)
 
-while guard.should_continue():
+while lg.should_continue():
     errors = verifier.verify(output)
-    guard.observe(errors, output=output)
+    lg.observe(errors, output=output)
     output = reviser.revise(output, errors)
 
-result = guard.result
+result = lg.result
 print(result.outcome)              # "converged" | "oscillating" | "diverged" | "max_iterations"
 print(result.best_output)          # the lowest-error iteration's output
 print(result.iterations_used)
@@ -82,7 +82,7 @@ When the loop is converging (`Aβ_smooth < 1`), LoopGain produces a closed-form 
 n_remaining = log(E_target / E_current) / log(Aβ_smooth)
 ```
 
-Available as `guard.eta` mid-loop. Returns `None` when the prediction isn't well-defined (no Aβ yet, target zero, or non-converging gain).
+Available as `lg.eta` mid-loop. Returns `None` when the prediction isn't well-defined (no Aβ yet, target zero, or non-converging gain).
 
 ---
 
@@ -112,27 +112,27 @@ Construct the monitor.
 - `smoothing_window` — EMA window for the smoothed Aβ. Default 3.
 - `assumed_fixed_cap` — Used to compute `savings_vs_fixed_cap`. Default 10.
 
-### `guard.observe(errors, output=None) -> str`
+### `lg.observe(errors, output=None) -> str`
 
 Record this iteration's errors and optional output. Returns the current state name. `errors` accepts a number (used directly) or any sequence (length used as magnitude).
 
-### `guard.should_continue() -> bool`
+### `lg.should_continue() -> bool`
 
 Returns `False` once a terminal state fires.
 
-### `guard.state -> str`
+### `lg.state -> str`
 
 Current state name. One of `INIT`, `FAST_CONVERGE`, `CONVERGING`, `STALLING`, `OSCILLATING`, `DIVERGING`, `TARGET_MET`, `MAX_ITERATIONS`.
 
-### `guard.eta -> int | None`
+### `lg.eta -> int | None`
 
 Predicted iterations to reach target. `None` when not well-defined.
 
-### `guard.gain_margin -> float | None`
+### `lg.gain_margin -> float | None`
 
 `1 / max(Aβ_smooth)`. `> 1` means stable headroom across the entire run.
 
-### `guard.result -> LoopGainResult`
+### `lg.result -> LoopGainResult`
 
 Terminal result with `outcome`, `iterations_used`, `best_index`, `best_output`, `best_error`, `convergence_profile`, `error_history`, `gain_margin`, `savings_vs_fixed_cap`. Safe to call mid-loop.
 

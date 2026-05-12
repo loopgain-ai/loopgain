@@ -118,12 +118,12 @@ class LoopGain:
     Example:
 
         >>> from loopgain import LoopGain
-        >>> guard = LoopGain(target_error=0.1)
-        >>> while guard.should_continue():
+        >>> lg = LoopGain(target_error=0.1)
+        >>> while lg.should_continue():
         ...     errors = verifier.verify(output)
-        ...     guard.observe(errors, output=output)
+        ...     lg.observe(errors, output=output)
         ...     output = reviser.revise(output, errors)
-        >>> result = guard.result
+        >>> result = lg.result
         >>> result.outcome          # "converged" | "oscillating" | ...
         >>> result.best_output      # lowest-error iteration's output
 

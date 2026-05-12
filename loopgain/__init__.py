@@ -3,10 +3,10 @@
 Public API:
 
     from loopgain import LoopGain
-    guard = LoopGain(target_error=0.1)
-    while guard.should_continue():
-        guard.observe(errors, output=output)
-    result = guard.result
+    lg = LoopGain(target_error=0.1)
+    while lg.should_continue():
+        lg.observe(errors, output=output)
+    result = lg.result
 """
 
 from loopgain.core import (
