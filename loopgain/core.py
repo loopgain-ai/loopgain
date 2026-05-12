@@ -354,3 +354,49 @@ class LoopGain:
         alpha = 2.0 / (self.smoothing_window + 1)
         prior = self._smoothed_history[-1]
         return alpha * latest_ab + (1 - alpha) * prior
+
+    # ----- Telemetry (opt-in) -----
+
+    def send_telemetry(
+        self,
+        endpoint: str,
+        token: str,
+        workload_id: Optional[str] = None,
+        timeout: float = 2.0,
+    ) -> bool:
+        """Send anonymized telemetry to a receiver endpoint.
+
+        Opt-in. Call once after the loop terminates. Sends only structural
+        statistics (state transitions, Aβ summary, gain margin, rollback
+        flag, library version, optional opaque workload label). Never sends
+        prompts, completions, error contents, or customer identity beyond
+        the bearer token.
+
+        Best-effort: errors are swallowed; never raises. Safe to call from
+        within an exception handler or finally block.
+
+        Args:
+            endpoint: Telemetry receiver URL.
+            token: Bearer token issued by the receiver (rotatable).
+            workload_id: Optional opaque label that groups related loops in
+                the dashboard. Never used to identify the customer.
+            timeout: Per-request timeout in seconds. Default 2.0.
+
+        Returns:
+            ``True`` on 2xx response, ``False`` otherwise.
+
+        Example:
+            >>> lg = LoopGain(target_error=0.1)
+            >>> while lg.should_continue():
+            ...     lg.observe(verifier.verify(output))
+            ...     output = reviser.revise(output)
+            >>> lg.send_telemetry(
+            ...     endpoint="https://telemetry.loopgain.ai/v1/aggregate",
+            ...     token="your-token-here",
+            ...     workload_id="my-rag-pipeline",
+            ... )
+        """
+        from loopgain.telemetry import build_payload, send_payload
+
+        payload = build_payload(self, workload_id=workload_id)
+        return send_payload(endpoint, token, payload, timeout=timeout)

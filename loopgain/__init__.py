@@ -22,6 +22,7 @@ from loopgain.core import (
     TARGET_MET,
     MAX_ITERATIONS,
 )
+from loopgain.telemetry import build_payload as build_telemetry_payload
 
 __version__ = "0.1.0"
 
@@ -37,5 +38,6 @@ __all__ = [
     "DIVERGING",
     "TARGET_MET",
     "MAX_ITERATIONS",
+    "build_telemetry_payload",
     "__version__",
 ]

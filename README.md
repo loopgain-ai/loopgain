@@ -136,6 +136,24 @@ Predicted iterations to reach target. `None` when not well-defined.
 
 Terminal result with `outcome`, `iterations_used`, `best_index`, `best_output`, `best_error`, `convergence_profile`, `error_history`, `gain_margin`, `savings_vs_fixed_cap`. Safe to call mid-loop.
 
+### `lg.send_telemetry(endpoint, token, workload_id=None, timeout=2.0) -> bool`
+
+**Opt-in.** Send a single anonymized telemetry POST after the loop terminates. Best-effort — never raises, returns `True` on 2xx, `False` otherwise.
+
+```python
+lg.send_telemetry(
+    endpoint="https://telemetry.loopgain.ai/v1/aggregate",  # or self-hosted
+    token="your-token",                                     # bearer auth
+    workload_id="my-rag-pipeline",                          # opaque label
+)
+```
+
+What is sent: state transitions, Aβ summary (min/max/median), gain margin, rollback flag, iterations used, savings, library version, optional opaque `workload_id`, threshold config, hour-bucketed timestamp.
+
+**What is NEVER sent: prompts, completions, error contents, output buffer, individual Aβ values, or any customer identity beyond the bearer token.** Privacy contract is enforced by the payload-shape unit tests in `tests/test_telemetry.py`.
+
+The Cascade-Systems-hosted endpoint at `telemetry.loopgain.ai` is one acceptable destination; the receiver code is open-source so customers can self-host to keep telemetry fully under their control.
+
 ---
 
 ## Status
