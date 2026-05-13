@@ -172,6 +172,52 @@ def test_payload_for_not_started_loop():
     assert p["loop"]["convergence_profile_summary"]["samples"] == 0
 
 
+# ----- v2 schema: ETA calibration fields -----
+
+
+def test_payload_schema_version_is_v2():
+    """Schema bumped to v2 with the addition of first_eta_* fields."""
+    assert SCHEMA_VERSION == 2
+    lg = _make_terminated_loop()
+    p = build_payload(lg)
+    assert p["schema_version"] == 2
+
+
+def test_payload_includes_first_eta_fields_when_loop_converged():
+    """A converging loop produces a captured eta snapshot."""
+    lg = _make_terminated_loop()
+    p = build_payload(lg)
+    loop = p["loop"]
+    assert "first_eta_prediction" in loop
+    assert "first_eta_at_iteration" in loop
+    assert loop["first_eta_prediction"] is not None
+    assert loop["first_eta_at_iteration"] is not None
+    assert loop["first_eta_prediction"] > 0
+    assert loop["first_eta_at_iteration"] >= 2
+
+
+def test_payload_first_eta_none_for_target_zero():
+    """target_error=0 means eta is never computable; both fields are None."""
+    lg = LoopGain(target_error=0.0, max_iterations=4)
+    for _ in range(4):
+        lg.observe(10.0)
+    p = build_payload(lg)
+    assert p["loop"]["first_eta_prediction"] is None
+    assert p["loop"]["first_eta_at_iteration"] is None
+
+
+def test_payload_first_eta_none_for_diverging_loop():
+    """A divergent loop never produces a positive eta."""
+    lg = LoopGain(target_error=0.5, max_iterations=20)
+    for e in [10.0, 12.0, 15.0, 20.0, 30.0]:
+        if not lg.should_continue():
+            break
+        lg.observe(e)
+    p = build_payload(lg)
+    assert p["loop"]["first_eta_prediction"] is None
+    assert p["loop"]["first_eta_at_iteration"] is None
+
+
 # ----- send_payload behavior -----
 
 

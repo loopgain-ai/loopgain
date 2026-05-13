@@ -25,10 +25,13 @@ if TYPE_CHECKING:
 
 
 # Schema version is incremented when the payload format breaks compatibility.
-SCHEMA_VERSION = 1
+# v2 (2026-05-13) adds first_eta_prediction + first_eta_at_iteration for the
+# ETA Accuracy dashboard panel. Receiver remains backward-compatible: v1
+# payloads are still accepted (new fields default to None).
+SCHEMA_VERSION = 2
 
 # Library version (kept in sync with __init__.py).
-LIBRARY_VERSION = "0.1.3"
+LIBRARY_VERSION = "0.1.4"
 
 
 def build_payload(
@@ -83,6 +86,13 @@ def build_payload(
             "savings_vs_fixed_cap": result.savings_vs_fixed_cap,
             "convergence_profile_summary": profile_summary,
             "rollback_triggered": result.outcome in ("oscillating", "diverged"),
+            # v2: first computable eta snapshot, for ETA calibration dashboard.
+            # Predicted total iterations = first_eta_at_iteration +
+            # first_eta_prediction; compare to iterations_used to compute the
+            # calibration error. Both are None when no prediction was made
+            # (target_error=0, loop never looked convergent, etc.).
+            "first_eta_prediction": result.first_eta_prediction,
+            "first_eta_at_iteration": result.first_eta_at_iteration,
         },
         "thresholds": {
             "fast_converge": lg.thresholds.fast_converge,

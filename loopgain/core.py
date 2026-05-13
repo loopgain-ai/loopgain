@@ -109,6 +109,19 @@ class LoopGainResult:
     """Iterations saved versus the assumed fixed cap (default 10).
     Zero if the loop hit ``max_iterations``; otherwise non-negative."""
 
+    first_eta_prediction: Optional[int] = None
+    """First non-None ``eta`` snapshot captured during the loop —
+    the predicted iterations-remaining at the moment the prediction
+    became computable. ``None`` if no prediction was ever made
+    (e.g., ``target_error == 0``, loop never converged toward target,
+    or the loop terminated before two observations)."""
+
+    first_eta_at_iteration: Optional[int] = None
+    """Iteration count when ``first_eta_prediction`` was captured.
+    ``None`` if no prediction was ever made. Predicted *total*
+    iterations = ``first_eta_at_iteration + first_eta_prediction``,
+    comparable to ``iterations_used`` for calibration."""
+
 
 class LoopGain:
     """Barkhausen stability monitor for AI agent loops.
@@ -173,6 +186,8 @@ class LoopGain:
         self._outputs: list[Any] = []
         self._state: str = INIT
         self._terminal: bool = False
+        self._first_eta_prediction: Optional[int] = None
+        self._first_eta_at_iteration: Optional[int] = None
 
     # ----- Public observation API -----
 
@@ -236,6 +251,17 @@ class LoopGain:
         ):
             self._state = MAX_ITERATIONS
             self._terminal = True
+
+        # Snapshot the first computable eta prediction for calibration.
+        # eta is None until smoothing settles and the loop looks convergent;
+        # we capture the *first* value it produces and the iteration it was
+        # produced at, so predicted_total = at_iter + eta is comparable to
+        # iterations_used.
+        if self._first_eta_prediction is None:
+            eta_now = self.eta
+            if eta_now is not None and eta_now > 0:
+                self._first_eta_prediction = eta_now
+                self._first_eta_at_iteration = len(self._error_history)
 
         return self._state
 
@@ -333,6 +359,8 @@ class LoopGain:
             error_history=list(self._error_history),
             gain_margin=self.gain_margin,
             savings_vs_fixed_cap=savings,
+            first_eta_prediction=self._first_eta_prediction,
+            first_eta_at_iteration=self._first_eta_at_iteration,
         )
 
     # ----- Internal helpers -----
