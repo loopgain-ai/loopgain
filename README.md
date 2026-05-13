@@ -7,6 +7,11 @@ Replace `max_iterations=5` with a real-time loop-gain (`Aβ`) monitor that knows
 [![PyPI](https://img.shields.io/pypi/v/loopgain.svg)](https://pypi.org/project/loopgain/)
 [![Python](https://img.shields.io/pypi/pyversions/loopgain.svg)](https://pypi.org/project/loopgain/)
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-73_passing-brightgreen.svg)](tests/)
+
+Works with **LangGraph**, **CrewAI**, **AutoGen**, **Claude Agent SDK**, and any custom verify-revise loop that exposes an error signal. Pure Python, no runtime dependencies.
+
+**Keywords:** AI agent loops · agentic AI · infinite loop detection · divergence detection · early stopping · convergence · agent orchestration · LLM stability · generator-verifier-reviser · feedback-loop control.
 
 ---
 
@@ -170,7 +175,7 @@ What is sent: state transitions, Aβ summary (min/max/median), gain margin, roll
 
 **What is NEVER sent: prompts, completions, error contents, output buffer, individual Aβ values, or any customer identity beyond the bearer token.** Privacy contract is enforced by the payload-shape unit tests in `tests/test_telemetry.py`.
 
-The Cascade-Systems-hosted endpoint at `telemetry.loopgain.ai` is one acceptable destination; the receiver code is [open-source](https://github.com/loopgain-ai/telemetry-receiver) so customers can self-host to keep telemetry fully under their control.
+The hosted endpoint at `telemetry.loopgain.ai` is one acceptable destination. The [receiver](https://github.com/loopgain-ai/telemetry-receiver) and [dashboard](https://github.com/loopgain-ai/dashboard) are both open-source — self-host to keep telemetry fully under your control.
 
 ---
 

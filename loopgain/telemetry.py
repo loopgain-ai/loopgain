@@ -6,9 +6,9 @@ rollback flag, library version, optional opaque workload label) are sent.
 Never sends prompts, completions, error contents, or customer identity beyond
 the bearer token.
 
-The Cascade-Systems-hosted endpoint at ``telemetry.loopgain.ai`` is one
-acceptable destination; customers can also self-host the receiver to keep
-the data fully under their control.
+The hosted endpoint at ``telemetry.loopgain.ai`` is one acceptable
+destination; the receiver code is open-source so users can also self-host
+to keep the data fully under their control.
 """
 
 from __future__ import annotations
