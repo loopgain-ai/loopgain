@@ -19,8 +19,6 @@ Works for **any iterative AI workflow with a measurable error signal** — verif
 
 Production agent loops universally use `max_iterations=N` as their termination policy. It's the embarrassing default of agentic AI: you either waste compute (loop stops too late) or ship bad output (loop stops too early). LoopGain replaces it with a control-theoretic stability monitor based on the **Barkhausen criterion** — a foundational result from electrical-engineering feedback-oscillator analysis (1921).
 
-The math is foundational. The product is the threshold bands, the best-so-far buffer, the ETA prediction, and the clean Python API.
-
 ---
 
 ## Install
@@ -181,7 +179,7 @@ The hosted endpoint at `telemetry.loopgain.ai` is one acceptable destination. Th
 
 ## Status
 
-**v0.1.0 — initial public release.** Core library shipped. Framework adapters (LangGraph, CrewAI, AutoGen, Vesper) and the cloud-aggregator dashboard come in v0.2+. The math and the API surface are stable.
+**Initial public release.** Core library shipped (current version: see the PyPI badge at the top). Framework adapters (LangGraph, CrewAI, AutoGen) and the cloud-aggregator dashboard come in v0.2+. The math and the API surface are stable.
 
 This is alpha software. The API may break before 1.0 if production usage surfaces design issues; pin the version.
 

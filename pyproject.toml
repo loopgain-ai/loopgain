@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "loopgain"
-version = "0.1.1"
+version = "0.1.2"
 description = "Barkhausen stability monitor for AI agent loops. Real-time loop-gain (Aβ) monitoring with five named threshold bands, best-so-far rollback, and ETA prediction."
 authors = [{name = "Dave Fitzsimmons", email = "dave_fitz@icloud.com"}]
 readme = "README.md"
