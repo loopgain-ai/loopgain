@@ -6,13 +6,10 @@ Replace `max_iterations=5` with a real-time loop-gain (`Aβ`) monitor that knows
 
 [![PyPI](https://img.shields.io/pypi/v/loopgain.svg)](https://pypi.org/project/loopgain/)
 [![Python](https://img.shields.io/pypi/pyversions/loopgain.svg)](https://pypi.org/project/loopgain/)
-[![npm](https://img.shields.io/npm/v/loopgain.svg)](https://www.npmjs.com/package/loopgain)
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-73_passing-brightgreen.svg)](tests/)
 
 Works with **LangGraph**, **CrewAI**, **AutoGen**, **Claude Agent SDK**, and any custom verify-revise loop that exposes an error signal. Pure Python, no runtime dependencies.
-
-> **Note:** The npm package is currently a name reservation. The Python library is the working v0.1 release; a JavaScript port is planned for v0.2.
 
 **Keywords:** AI agent loops · agentic AI · infinite loop detection · divergence detection · early stopping · convergence · agent orchestration · LLM stability · generator-verifier-reviser · feedback-loop control.
 
