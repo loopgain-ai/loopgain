@@ -1,9 +1,12 @@
 """LoopGain — Barkhausen stability monitor for AI agent loops.
 
 The product layer of the Barkhausen stability criterion (1921) applied to
-agent verify-revise feedback loops. Replaces the universal max_iterations
-hack with a real-time loop-gain monitor that classifies the loop into one
-of five named states and decides whether to continue, stop, or roll back.
+any iterative AI loop with a measurable error signal: verify-revise (GVR)
+patterns, refinement passes, tool-use retry chains, RAG with self-correction,
+code-gen with linter feedback, multi-step reasoning loops, and custom
+feedback systems. Replaces the universal max_iterations hack with a
+real-time loop-gain monitor that classifies the loop into one of five
+named states and decides whether to continue, stop, or roll back.
 
 The math is foundational EE control theory. The product layer is the
 threshold bands, the best-so-far buffer, the ETA prediction, and the
@@ -108,12 +111,16 @@ class LoopGainResult:
 
 
 class LoopGain:
-    """Barkhausen stability monitor for AI agent verify-revise loops.
+    """Barkhausen stability monitor for AI agent loops.
 
-    Wraps any iterative loop and decides in real time whether to continue,
-    stop, or roll back. Replaces the universal ``max_iterations=N`` hack
-    with a control-theoretic stability monitor based on the Barkhausen
-    criterion.
+    Wraps any iterative loop with a measurable error signal and decides in
+    real time whether to continue, stop, or roll back. Works for
+    verify-revise (GVR) loops, refinement passes, tool-use retry chains,
+    RAG with self-correction, code-gen with linter feedback, multi-step
+    reasoning loops, and any custom iterative process where you can
+    produce a number that should drop toward zero. Replaces the universal
+    ``max_iterations=N`` hack with a control-theoretic stability monitor
+    based on the Barkhausen criterion.
 
     Example:
 

@@ -1,6 +1,6 @@
 # LoopGain
 
-**Barkhausen stability monitor for AI agent verify-revise loops.**
+**Barkhausen stability monitor for AI agent loops.**
 
 Replace `max_iterations=5` with a real-time loop-gain (`Aβ`) monitor that knows whether your agent loop is converging, stalling, oscillating, or diverging — and what to do in each case.
 
@@ -9,7 +9,7 @@ Replace `max_iterations=5` with a real-time loop-gain (`Aβ`) monitor that knows
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-73_passing-brightgreen.svg)](tests/)
 
-Works with **LangGraph**, **CrewAI**, **AutoGen**, **Claude Agent SDK**, and any custom verify-revise loop that exposes an error signal. Pure Python, no runtime dependencies.
+Works for **any iterative AI workflow with a measurable error signal** — verify-revise loops, refinement passes, tool-use retry chains, RAG with self-correction, code-gen with linter feedback, multi-step reasoning loops. Integrates with **LangGraph**, **CrewAI**, **AutoGen**, **Claude Agent SDK**, and custom stacks. Pure Python, no runtime dependencies.
 
 **Keywords:** AI agent loops · agentic AI · infinite loop detection · divergence detection · early stopping · convergence · agent orchestration · LLM stability · generator-verifier-reviser · feedback-loop control.
 
@@ -35,7 +35,7 @@ Pure Python, no dependencies, supports Python 3.10+.
 
 ## Usage
 
-Three lines of code wrap any verify-revise loop:
+Three lines of code wrap any iterative loop with a measurable error signal:
 
 ```python
 from loopgain import LoopGain
@@ -197,6 +197,16 @@ This is alpha software. The API may break before 1.0 if production usage surface
 
 LoopGain applies the **Barkhausen stability criterion** (Heinrich Barkhausen, 1921 — the foundational result on when feedback amplifiers oscillate) to AI agent feedback loops. The criterion was originally a way to predict whether an electronic oscillator would sustain oscillation; it turns out to map cleanly onto any feedback loop you can attach an error signal to.
 
-The cleanest summary: a verify-revise loop is a feedback system with measurable error magnitude. The ratio `E(n) / E(n-1)` is its empirical loop gain. The Barkhausen result tells you that loop gain less than 1 converges, equal to 1 oscillates, greater than 1 diverges. LoopGain operationalizes this: classifies the loop's current band, decides what to do, and tells you when you'll converge.
+The cleanest summary: an iterative AI loop with a measurable error signal is a feedback system. The ratio `E(n) / E(n-1)` is its empirical loop gain. The Barkhausen result tells you that loop gain less than 1 converges, equal to 1 oscillates, greater than 1 diverges. LoopGain operationalizes this: classifies the loop's current band, decides what to do, and tells you when you'll converge.
+
+Loop types this applies to in practice:
+
+- **Verify-revise loops** (GVR pattern) — generator produces, verifier finds issues, reviser fixes. Error = issue count or severity-weighted score.
+- **Refinement loops** — initial output, iterate to improve. Error = distance from target spec / rubric score.
+- **Tool-use retry chains** — agent calls tool, gets back error/success, retries. Error = consecutive failure count or aggregate score.
+- **RAG with self-correction** — retrieve, generate, critique, re-retrieve. Error = critique severity or hallucination score.
+- **Code generation with linter/test feedback** — generate, run tests/linter, fix, repeat. Error = failing test count or linter violation count.
+- **Multi-step reasoning loops** — ReAct-style think/act/observe iterations. Error = whatever the agent's quality assessor returns.
+- **Custom feedback loops** — anything where you can produce a number that should drop toward zero as the loop succeeds.
 
 See [loopgain.ai](https://loopgain.ai) for the longer write-up.
