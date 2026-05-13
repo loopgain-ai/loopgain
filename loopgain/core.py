@@ -10,7 +10,7 @@ named states and decides whether to continue, stop, or roll back.
 
 The math is foundational EE control theory. The product layer is the
 threshold bands, the best-so-far buffer, the ETA prediction, and the
-clean Python API. See https://loopgain.ai for the long-form write-up.
+clean Python API.
 
 License: Apache-2.0
 """

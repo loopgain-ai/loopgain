@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 SCHEMA_VERSION = 1
 
 # Library version (kept in sync with __init__.py).
-LIBRARY_VERSION = "0.1.2"
+LIBRARY_VERSION = "0.1.3"
 
 
 def build_payload(

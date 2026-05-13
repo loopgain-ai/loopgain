@@ -73,7 +73,7 @@ Plus a short-circuit: if observed error drops at or below `target_error`, the lo
 
 The `±0.05` noise band around `Aβ=1` absorbs stochastic jitter from agent outputs without triggering false-positive aborts. The `0.85` `STALLING` boundary is an early warning — by the time `Aβ` crosses `1.0`, you've already wasted iterations.
 
-These threshold defaults work well for typical agent loops out of the box. Tune them per domain (via the `ThresholdBands` argument) once you have production traces.
+These threshold defaults are derived from the Barkhausen-stability analysis and serve as reasonable starting points. Tune them per domain (via the `ThresholdBands` argument) once you have production traces.
 
 ---
 
@@ -206,5 +206,3 @@ Loop types this applies to in practice:
 - **Code generation with linter/test feedback** — generate, run tests/linter, fix, repeat. Error = failing test count or linter violation count.
 - **Multi-step reasoning loops** — ReAct-style think/act/observe iterations. Error = whatever the agent's quality assessor returns.
 - **Custom feedback loops** — anything where you can produce a number that should drop toward zero as the loop succeeds.
-
-See [loopgain.ai](https://loopgain.ai) for the longer write-up.
