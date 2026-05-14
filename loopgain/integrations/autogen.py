@@ -19,6 +19,7 @@ should upgrade or fall back to the raw ``LoopGain.observe()`` loop.
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Callable, List, Optional
 
 if TYPE_CHECKING:
@@ -99,12 +100,28 @@ class AutoGenAdapter:
     ) -> AsyncIterator[Any]:
         """Yield each message/event from ``team.run_stream`` while driving
         LoopGain. Cancels the team's cancellation_token when LoopGain
-        signals a terminal state."""
+        signals a terminal state, then breaks out of the iteration.
+
+        AutoGen's runtime raises ``asyncio.CancelledError`` from its own
+        internal tasks once the token is cancelled. The adapter catches
+        that error iff *we* initiated the cancellation, so callers see a
+        clean termination instead of an exception they didn't ask for."""
         kwargs: dict[str, Any] = {"task": task}
         if cancellation_token is not None:
             kwargs["cancellation_token"] = cancellation_token
 
-        async for message in team.run_stream(**kwargs):
+        we_cancelled = False
+        iterator = team.run_stream(**kwargs).__aiter__()
+        while True:
+            try:
+                message = await iterator.__anext__()
+            except StopAsyncIteration:
+                break
+            except asyncio.CancelledError:
+                if we_cancelled:
+                    break
+                raise
+
             yield message
 
             # Don't observe the terminal TaskResult — it's a wrapper, not
@@ -133,3 +150,7 @@ class AutoGenAdapter:
                 cancel = getattr(cancellation_token, "cancel", None)
                 if callable(cancel):
                     cancel()
+                    we_cancelled = True
+                    # Stop pulling from the iterator. The next __anext__
+                    # would raise CancelledError once the runtime tears down.
+                    break

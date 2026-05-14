@@ -22,14 +22,32 @@ from loopgain.integrations import AutoGenAdapter, CrewAIAdapter, LangGraphAdapte
 
 def test_integrations_package_does_not_eagerly_import_frameworks():
     """Importing loopgain.integrations must not pull in langgraph, crewai,
-    or autogen — they're optional deps and importing the package is cheap."""
-    import sys
+    or autogen — they're optional deps and importing the package is cheap.
 
-    for forbidden in ("langgraph", "crewai", "autogen", "autogen_agentchat"):
-        assert forbidden not in sys.modules, (
-            f"loopgain.integrations imported {forbidden!r}; "
-            "adapters must lazy-import their frameworks"
-        )
+    Run in a clean subprocess so a previously-imported framework (from
+    e.g. an integration smoke earlier in the test run) doesn't taint
+    sys.modules."""
+    import subprocess
+    import sys
+    import textwrap
+
+    code = textwrap.dedent(
+        """
+        import sys
+        import loopgain.integrations  # noqa: F401
+        forbidden = ('langgraph', 'crewai', 'autogen', 'autogen_agentchat')
+        leaked = [m for m in forbidden if m in sys.modules]
+        if leaked:
+            raise SystemExit('eagerly imported: ' + ','.join(leaked))
+        """
+    ).strip()
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_unknown_attribute_raises_attribute_error():
@@ -264,11 +282,17 @@ class _FakeTeam:
 
 
 class _FakeCancellationToken:
+    """Mirrors autogen_core.CancellationToken's surface: cancel() method
+    plus is_cancelled() query method (NOT an attribute)."""
+
     def __init__(self):
-        self.cancelled = False
+        self._cancelled = False
 
     def cancel(self):
-        self.cancelled = True
+        self._cancelled = True
+
+    def is_cancelled(self) -> bool:
+        return self._cancelled
 
 
 def test_autogen_adapter_observes_filtered_messages():
@@ -332,7 +356,7 @@ def test_autogen_adapter_cancels_token_on_terminal_state():
         observe_sources={"verifier"},
     )
     asyncio.run(adapter.run(team, task="hi", cancellation_token=token))
-    assert token.cancelled is True
+    assert token.is_cancelled() is True
 
 
 def test_autogen_adapter_async_error_fn():

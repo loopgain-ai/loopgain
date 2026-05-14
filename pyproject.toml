@@ -86,3 +86,6 @@ exclude = ["tests*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: tests that import a real framework (langgraph, crewai, autogen). Skipped automatically when the framework isn't installed.",
+]
