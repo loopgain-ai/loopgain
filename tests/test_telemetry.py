@@ -59,16 +59,12 @@ def test_payload_loop_section_has_outcome_and_stats():
     assert "rollback_triggered" in loop
 
 
-def test_payload_convergence_profile_summary_only_aggregates():
-    """Convergence profile is summarized to min/max/median/samples —
-    the raw per-iteration Aβ values are NOT transmitted."""
+def test_payload_convergence_profile_summary_present():
+    """Convergence profile summary is min/max/median/samples on loop.*."""
     lg = _make_terminated_loop()
     p = build_payload(lg)
     summary = p["loop"]["convergence_profile_summary"]
     assert set(summary.keys()) == {"min", "max", "median", "samples"}
-    # Raw values are not present anywhere in the payload.
-    assert "convergence_profile" not in p["loop"]
-    assert "error_history" not in p["loop"]
 
 
 def test_payload_does_not_include_outputs():
@@ -88,13 +84,13 @@ def test_payload_does_not_include_outputs():
     assert "completion" not in p_json
 
 
-def test_payload_does_not_include_error_history():
-    """Raw error magnitudes are not transmitted — only the summary."""
+def test_payload_omits_per_iteration_when_disabled():
+    """include_per_iteration=False sends only aggregate summary stats."""
     lg = _make_terminated_loop()
-    p = build_payload(lg)
-    p_json = json.dumps(p)
-    # The raw error_history list is not in the payload.
-    assert "error_history" not in p_json
+    p = build_payload(lg, include_per_iteration=False)
+    assert "per_iteration" not in p
+    # The summary on loop.* is unchanged.
+    assert "convergence_profile_summary" in p["loop"]
 
 
 def test_payload_rollback_flag_set_on_divergence():
@@ -175,12 +171,12 @@ def test_payload_for_not_started_loop():
 # ----- v2 schema: ETA calibration fields -----
 
 
-def test_payload_schema_version_is_v2():
-    """Schema bumped to v2 with the addition of first_eta_* fields."""
-    assert SCHEMA_VERSION == 2
+def test_payload_schema_version_is_v3():
+    """Schema bumped to v3 with the addition of per_iteration + classification."""
+    assert SCHEMA_VERSION == 3
     lg = _make_terminated_loop()
     p = build_payload(lg)
-    assert p["schema_version"] == 2
+    assert p["schema_version"] == 3
 
 
 def test_payload_includes_first_eta_fields_when_loop_converged():
@@ -423,6 +419,158 @@ def test_send_payload_https_still_works_after_scheme_check(monkeypatch):
         payload=p,
     )
     assert ok is True
+
+
+# ----- v3 schema: per-iteration trajectories + classification fields -----
+
+
+def test_payload_includes_per_iteration_by_default():
+    """Per-iteration trajectories are included by default and contain
+    one error entry per observe() call. The Aβ trajectory is shorter
+    (no Aβ for the first observation, plus a TARGET_MET short-circuit
+    skips the Aβ append for the final observation)."""
+    lg = _make_terminated_loop()
+    p = build_payload(lg)
+    assert "per_iteration" in p
+    pit = p["per_iteration"]
+    assert pit["truncated"] is False
+    assert pit["cap"] == 256
+    iters = p["loop"]["iterations_used"]
+    assert len(pit["error_history"]) == iters
+    # Aβ has at most iterations_used - 1 entries; loops that terminate
+    # on TARGET_MET have one fewer (the short-circuit skips the append).
+    assert len(pit["convergence_profile"]) <= iters - 1
+    assert len(pit["convergence_profile"]) >= iters - 2
+
+
+def test_payload_per_iteration_truncates_at_cap():
+    """Loops longer than PER_ITERATION_CAP are truncated; truncated flag set."""
+    from loopgain.telemetry import PER_ITERATION_CAP
+
+    # Drive a long-running CONVERGING loop: Aβ ≈ 0.7 throughout, which
+    # stays under the STALLING threshold so the loop never terminates on
+    # OSCILLATING. target_error=0 disables TARGET_MET; max_iterations
+    # caps it past PER_ITERATION_CAP so the trajectory exceeds the cap.
+    n = PER_ITERATION_CAP + 50
+    lg = LoopGain(target_error=0.0, max_iterations=n)
+    err = 1.0
+    for _ in range(n):
+        if not lg.should_continue():
+            break
+        lg.observe(err)
+        err *= 0.7
+    p = build_payload(lg)
+    pit = p["per_iteration"]
+    assert pit["truncated"] is True
+    assert len(pit["error_history"]) == PER_ITERATION_CAP
+    assert len(pit["convergence_profile"]) == PER_ITERATION_CAP
+
+
+def test_payload_per_iteration_excludes_outputs():
+    """Per-iteration arrays must not contain customer outputs even when
+    they were passed to observe()."""
+    big_output = {"prompt": "secret customer data"}
+    lg = LoopGain(target_error=0.5, max_iterations=10)
+    for e in [10.0, 5.0, 0.3]:
+        if not lg.should_continue():
+            break
+        lg.observe(e, output=big_output)
+    p = build_payload(lg)
+    p_json = json.dumps(p)
+    assert "secret customer data" not in p_json
+    # error_history entries are floats, not output objects.
+    for entry in p["per_iteration"]["error_history"]:
+        assert isinstance(entry, (int, float))
+
+
+def test_payload_includes_classification_fields_when_provided():
+    lg = _make_terminated_loop()
+    p = build_payload(
+        lg,
+        framework="langgraph",
+        loop_type="verify_revise",
+        team="search-prod",
+    )
+    assert p["framework"] == "langgraph"
+    assert p["loop_type"] == "verify_revise"
+    assert p["team"] == "search-prod"
+
+
+def test_payload_classification_fields_default_to_none():
+    lg = _make_terminated_loop()
+    p = build_payload(lg)
+    assert p["framework"] is None
+    assert p["loop_type"] is None
+    assert p["team"] is None
+
+
+def test_send_telemetry_passes_classification_fields(monkeypatch):
+    """LoopGain.send_telemetry plumbs framework/loop_type/team through."""
+
+    class FakeResponse:
+        status = 202
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured["body"] = req.data
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    lg = _make_terminated_loop()
+    ok = lg.send_telemetry(
+        endpoint="https://telemetry.loopgain.ai/v1/aggregate",
+        token="t",
+        framework="crewai",
+        loop_type="rag_refine",
+        team="ml-team",
+    )
+    assert ok is True
+    body = json.loads(captured["body"])
+    assert body["framework"] == "crewai"
+    assert body["loop_type"] == "rag_refine"
+    assert body["team"] == "ml-team"
+
+
+def test_send_telemetry_can_disable_per_iteration(monkeypatch):
+    """include_per_iteration=False is plumbed through send_telemetry."""
+
+    class FakeResponse:
+        status = 202
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured["body"] = req.data
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    lg = _make_terminated_loop()
+    ok = lg.send_telemetry(
+        endpoint="https://telemetry.loopgain.ai/v1/aggregate",
+        token="t",
+        include_per_iteration=False,
+    )
+    assert ok is True
+    body = json.loads(captured["body"])
+    assert "per_iteration" not in body
+
+
+# ----- send_telemetry pass-through tests (existing) -----
 
 
 def test_send_telemetry_method_passes_through_allow_insecure(monkeypatch):

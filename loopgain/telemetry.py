@@ -1,10 +1,17 @@
 """Anonymized telemetry emission for LoopGain.
 
 Opt-in. Sends a single POST per loop run to a customer-configured endpoint.
-Privacy: only structural statistics (state transitions, Aβ summary, gain margin,
-rollback flag, library version, optional opaque workload label) are sent.
-Never sends prompts, completions, error contents, or customer identity beyond
-the bearer token.
+Privacy: only structural statistics — Aβ values, error magnitudes, state
+transitions, gain margin, rollback flag, library version, optional opaque
+workload/classification labels. Never sends prompts, completions, error
+contents (the textual content of failures), customer identity beyond the
+bearer token, or best-so-far outputs.
+
+Per-iteration trajectories (the smoothed Aβ series and error-magnitude
+series) are included by default since they drive the Loop Detail scrubber
+in the dashboard. They are purely numerical and contain no customer
+content. Pass ``include_per_iteration=False`` to ``build_payload`` /
+``LoopGain.send_telemetry`` to send only the aggregate summary.
 
 The hosted endpoint at ``telemetry.loopgain.ai`` is one acceptable
 destination; the receiver code is open-source so users can also self-host
@@ -27,18 +34,31 @@ if TYPE_CHECKING:
 
 # Schema version is incremented when the payload format breaks compatibility.
 # v2 (2026-05-13) adds first_eta_prediction + first_eta_at_iteration for the
-# ETA Accuracy dashboard panel. Receiver remains backward-compatible: v1
-# payloads are still accepted (new fields default to None).
-SCHEMA_VERSION = 2
+# ETA Accuracy dashboard panel. v3 (2026-05-14) adds the optional
+# per_iteration block (capped trajectories) and the framework/loop_type/team
+# classification fields. Receiver remains backward-compatible: v1/v2 payloads
+# are still accepted (new fields default to None / NULL).
+SCHEMA_VERSION = 3
 
 # Library version (kept in sync with __init__.py).
-LIBRARY_VERSION = "0.1.5"
+LIBRARY_VERSION = "0.1.6"
+
+# Cap on per-iteration trajectory length sent to telemetry. Loops longer than
+# this are truncated to the first PER_ITERATION_CAP entries with a
+# ``truncated: true`` flag in the payload. 256 is well above the typical
+# 5-15 iterations of a converging loop and bounds the payload size at
+# ~6 KB even for very long traces.
+PER_ITERATION_CAP = 256
 
 
 def build_payload(
     lg: "LoopGain",
     workload_id: Optional[str] = None,
     timestamp: Optional[datetime] = None,
+    framework: Optional[str] = None,
+    loop_type: Optional[str] = None,
+    team: Optional[str] = None,
+    include_per_iteration: bool = True,
 ) -> dict[str, Any]:
     """Construct the anonymized telemetry payload from a LoopGain instance.
 
@@ -50,9 +70,21 @@ def build_payload(
             related loops in the dashboard. Never used to identify the
             customer. Default ``None``.
         timestamp: When the loop ran. Defaults to current UTC, hour-bucketed.
+        framework: Optional classification label naming the agent framework
+            (``"langgraph"``, ``"crewai"``, ``"autogen"``, ``"vesper"``, etc.).
+            Adapters auto-stamp this; raw API users may pass it manually.
+        loop_type: Optional classification label naming the loop pattern
+            (``"verify_revise"``, ``"rag_refine"``, ``"tool_use_retry"``,
+            etc.). Free-form; used for filtering in the dashboard.
+        team: Optional opaque label grouping by team or environment
+            (``"prod"``, ``"team-search"``, etc.). Used for filtering only.
+        include_per_iteration: If ``True`` (default), the payload includes
+            the smoothed Aβ trajectory and the error-magnitude trajectory
+            (capped at ``PER_ITERATION_CAP`` entries with a ``truncated``
+            flag). Set ``False`` to send only aggregate summary stats.
 
     Returns:
-        A JSON-serializable dict matching the v1 telemetry schema.
+        A JSON-serializable dict matching the v3 telemetry schema.
     """
     if timestamp is None:
         timestamp = datetime.now(timezone.utc)
@@ -74,12 +106,17 @@ def build_payload(
     else:
         profile_summary = {"min": None, "max": None, "median": None, "samples": 0}
 
-    return {
+    payload: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "library": "loopgain",
         "library_version": LIBRARY_VERSION,
         "workload_id": workload_id,
         "timestamp_hour": hour_bucket,
+        # v3 classification fields. All optional; NULL on the receiver when
+        # not provided. Used to drive dashboard filters across panels.
+        "framework": framework,
+        "loop_type": loop_type,
+        "team": team,
         "loop": {
             "outcome": result.outcome,
             "iterations_used": result.iterations_used,
@@ -103,6 +140,23 @@ def build_payload(
         },
         "smoothing_window": lg.smoothing_window,
     }
+
+    if include_per_iteration:
+        # v3: per-iteration trajectories drive the Loop Detail scrubber.
+        # Cap to bound the payload (and therefore D1 row size); ~6 KB at the
+        # cap. error_history length == iterations_used; convergence_profile
+        # is one shorter (no Aβ for the first observation).
+        errors = result.error_history
+        ab = result.convergence_profile
+        truncated = len(errors) > PER_ITERATION_CAP or len(ab) > PER_ITERATION_CAP
+        payload["per_iteration"] = {
+            "error_history": list(errors[:PER_ITERATION_CAP]),
+            "convergence_profile": list(ab[:PER_ITERATION_CAP]),
+            "truncated": truncated,
+            "cap": PER_ITERATION_CAP,
+        }
+
+    return payload
 
 
 def send_payload(

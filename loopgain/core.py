@@ -399,14 +399,18 @@ class LoopGain:
         workload_id: Optional[str] = None,
         timeout: float = 2.0,
         allow_insecure: bool = False,
+        framework: Optional[str] = None,
+        loop_type: Optional[str] = None,
+        team: Optional[str] = None,
+        include_per_iteration: bool = True,
     ) -> bool:
         """Send anonymized telemetry to a receiver endpoint.
 
         Opt-in. Call once after the loop terminates. Sends only structural
-        statistics (state transitions, Aβ summary, gain margin, rollback
-        flag, library version, optional opaque workload label). Never sends
-        prompts, completions, error contents, or customer identity beyond
-        the bearer token.
+        statistics — Aβ values, error magnitudes, state transitions, gain
+        margin, rollback flag, library version, and optional opaque labels.
+        Never sends prompts, completions, error contents, or customer
+        identity beyond the bearer token.
 
         Best-effort: errors are swallowed; never raises. Safe to call from
         within an exception handler or finally block.
@@ -420,6 +424,15 @@ class LoopGain:
             timeout: Per-request timeout in seconds. Default 2.0.
             allow_insecure: If ``True``, permit ``http://`` endpoints (for
                 local development). Default ``False``.
+            framework: Optional classification — agent framework name
+                (``"langgraph"``, ``"crewai"``, etc.). Adapters auto-stamp.
+            loop_type: Optional classification — loop pattern name
+                (``"verify_revise"``, ``"rag_refine"``, etc.).
+            team: Optional classification — team or environment label.
+            include_per_iteration: If ``True`` (default), include the
+                per-iteration Aβ + error trajectories (capped) so the
+                dashboard's Loop Detail scrubber works. Set ``False`` to
+                send only aggregate summary stats.
 
         Returns:
             ``True`` on 2xx response, ``False`` otherwise.
@@ -433,11 +446,20 @@ class LoopGain:
             ...     endpoint="https://telemetry.loopgain.ai/v1/aggregate",
             ...     token="your-token-here",
             ...     workload_id="my-rag-pipeline",
+            ...     framework="langgraph",
+            ...     loop_type="verify_revise",
             ... )
         """
         from loopgain.telemetry import build_payload, send_payload
 
-        payload = build_payload(self, workload_id=workload_id)
+        payload = build_payload(
+            self,
+            workload_id=workload_id,
+            framework=framework,
+            loop_type=loop_type,
+            team=team,
+            include_per_iteration=include_per_iteration,
+        )
         return send_payload(
             endpoint, token, payload, timeout=timeout, allow_insecure=allow_insecure
         )
