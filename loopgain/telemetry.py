@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 SCHEMA_VERSION = 3
 
 # Library version (kept in sync with __init__.py).
-LIBRARY_VERSION = "0.1.6"
+LIBRARY_VERSION = "0.1.7"
 
 # Cap on per-iteration trajectory length sent to telemetry. Loops longer than
 # this are truncated to the first PER_ITERATION_CAP entries with a

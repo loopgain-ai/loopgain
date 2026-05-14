@@ -177,6 +177,107 @@ The hosted endpoint at `telemetry.loopgain.ai` is one acceptable destination. Th
 
 ---
 
+## Framework adapters
+
+Thin wrappers under `loopgain.integrations` drive each major agent framework's iteration with a `LoopGain` monitor and auto-stamp `framework="<name>"` on telemetry. The frameworks themselves are **optional dependencies** — install the extra you need:
+
+```bash
+pip install 'loopgain[langgraph]'   # LangGraph
+pip install 'loopgain[crewai]'      # CrewAI
+pip install 'loopgain[autogen]'     # AutoGen v0.4+
+pip install 'loopgain[all]'         # all three
+```
+
+All adapters take a `LoopGain` instance plus an `error_fn` you provide — the framework doesn't know what your error signal is, so the adapter doesn't either. `error_fn` returns a non-negative number (or `None` to skip an iteration).
+
+### LangGraph
+
+Drives `graph.stream(input, stream_mode="updates")`. Each update is one iteration.
+
+```python
+from loopgain import LoopGain
+from loopgain.integrations import LangGraphAdapter
+
+graph = build_my_verify_revise_graph().compile()
+lg = LoopGain(target_error=0.1, max_iterations=20)
+
+adapter = LangGraphAdapter(
+    lg=lg,
+    error_fn=lambda update: len(update.get("verifier", {}).get("errors", [])),
+)
+final_state = adapter.run(graph, {"draft": initial})
+
+lg.send_telemetry(
+    endpoint=os.environ["LOOPGAIN_TELEMETRY_ENDPOINT"],
+    token=os.environ["LOOPGAIN_TELEMETRY_TOKEN"],
+    workload_id="rag-rewrite",
+    framework=adapter.framework_name,        # "langgraph", auto-stamped
+)
+```
+
+`adapter.stream(...)` yields each item if you want the full trace; `adapter.arun(...)` / `adapter.astream(...)` are the async counterparts and accept an async `error_fn`.
+
+### CrewAI
+
+Installs `step_callback` and/or `task_callback` on a Crew. Pick whichever granularity matches your loop — `step_error_fn` for refinement *within* a Task, `task_error_fn` for refinement *across* Tasks.
+
+```python
+from crewai import Crew
+from loopgain import LoopGain
+from loopgain.integrations import CrewAIAdapter
+
+lg = LoopGain(target_error=0.1, max_iterations=20)
+adapter = CrewAIAdapter(
+    lg=lg,
+    task_error_fn=lambda task_output: count_failed_checks(task_output.raw),
+)
+crew = Crew(agents=[...], tasks=[...])
+adapter.install(crew)
+result = crew.kickoff()
+adapter.uninstall()         # or use `with CrewAIAdapter(...) as a:` context
+
+lg.send_telemetry(
+    endpoint=...,
+    token=...,
+    framework=adapter.framework_name,        # "crewai"
+)
+```
+
+The adapter chains with any callback you already had installed — your existing instrumentation isn't overwritten.
+
+### AutoGen (v0.4+)
+
+Wraps `team.run_stream(task=...)`. In a verify-revise rotation, filter to the verifier's messages with `observe_sources={"verifier"}` so only it drives `observe()`.
+
+```python
+from autogen_agentchat.teams import RoundRobinGroupChat
+from loopgain import LoopGain
+from loopgain.integrations import AutoGenAdapter
+
+team = RoundRobinGroupChat(participants=[generator, verifier])
+lg = LoopGain(target_error=0.1, max_iterations=20)
+adapter = AutoGenAdapter(
+    lg=lg,
+    error_fn=lambda msg: parse_verifier_score(msg.content),
+    observe_sources={"verifier"},
+)
+result = await adapter.run(team, task="...")
+
+lg.send_telemetry(
+    endpoint=...,
+    token=...,
+    framework=adapter.framework_name,        # "autogen"
+)
+```
+
+Pass a `cancellation_token` to `adapter.run(...)` and the adapter will cancel it when LoopGain reaches a terminal state (target met, oscillation, divergence). The legacy v0.2 `ConversableAgent.initiate_chat` API is **not** supported — use the v0.4 event-driven runtime.
+
+### Custom integrations
+
+For frameworks without an adapter, the raw `LoopGain.observe()` API works against any iterable. The adapters are 100-200 lines each — copy one of `loopgain/integrations/{langgraph,crewai,autogen}.py` as a starting point.
+
+---
+
 ## Status
 
 **Initial public release.** Core library shipped (current version: see the PyPI badge at the top). Framework adapters (LangGraph, CrewAI, AutoGen) and the cloud-aggregator dashboard come in v0.2+. The math and the API surface are stable.

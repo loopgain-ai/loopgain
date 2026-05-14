@@ -24,7 +24,7 @@ from loopgain.core import (
 )
 from loopgain.telemetry import build_payload as build_telemetry_payload
 
-__version__ = "0.1.6"
+__version__ = "0.1.7"
 
 __all__ = [
     "LoopGain",

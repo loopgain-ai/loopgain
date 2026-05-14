@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "loopgain"
-version = "0.1.6"
+version = "0.1.7"
 description = "Barkhausen stability monitor for AI agent loops. Real-time loop-gain (Aβ) monitoring with five named threshold bands, best-so-far rollback, and ETA prediction."
 authors = [{name = "Dave Fitzsimmons", email = "hello@loopgain.ai"}]
 readme = "README.md"
@@ -71,6 +71,13 @@ Issues = "https://github.com/loopgain-ai/loopgain/issues"
 
 [project.optional-dependencies]
 test = ["pytest>=7.0"]
+# Framework adapter extras. Install with e.g. `pip install loopgain[langgraph]`.
+# Versions are floors only — any reasonably recent release should work since
+# the adapters duck-type the framework's public stream/callback surface.
+langgraph = ["langgraph>=0.2"]
+crewai = ["crewai>=0.30"]
+autogen = ["autogen-agentchat>=0.4"]
+all = ["langgraph>=0.2", "crewai>=0.30", "autogen-agentchat>=0.4"]
 
 [tool.setuptools.packages.find]
 where = ["."]
