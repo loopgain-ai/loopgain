@@ -398,6 +398,7 @@ class LoopGain:
         token: str,
         workload_id: Optional[str] = None,
         timeout: float = 2.0,
+        allow_insecure: bool = False,
     ) -> bool:
         """Send anonymized telemetry to a receiver endpoint.
 
@@ -411,11 +412,14 @@ class LoopGain:
         within an exception handler or finally block.
 
         Args:
-            endpoint: Telemetry receiver URL.
+            endpoint: Telemetry receiver URL. Must use ``https://``;
+                ``http://`` is rejected unless ``allow_insecure`` is ``True``.
             token: Bearer token issued by the receiver (rotatable).
             workload_id: Optional opaque label that groups related loops in
                 the dashboard. Never used to identify the customer.
             timeout: Per-request timeout in seconds. Default 2.0.
+            allow_insecure: If ``True``, permit ``http://`` endpoints (for
+                local development). Default ``False``.
 
         Returns:
             ``True`` on 2xx response, ``False`` otherwise.
@@ -434,4 +438,6 @@ class LoopGain:
         from loopgain.telemetry import build_payload, send_payload
 
         payload = build_payload(self, workload_id=workload_id)
-        return send_payload(endpoint, token, payload, timeout=timeout)
+        return send_payload(
+            endpoint, token, payload, timeout=timeout, allow_insecure=allow_insecure
+        )

@@ -305,3 +305,157 @@ def test_send_payload_constructs_correct_request(monkeypatch):
     body = json.loads(captured["body"])
     assert body["library_version"] == LIBRARY_VERSION
     assert captured["timeout"] == 1.5
+
+
+# ----- Scheme allow-list (0.1.5) -----
+#
+# The library refuses to attach the bearer token to anything but
+# `https://` by default. `http://` is allowed only when the caller
+# explicitly opts in with `allow_insecure=True` (intended for local dev).
+# Every other scheme (`file://`, `javascript:`, `ftp://`, ...) is rejected
+# unconditionally so a misconfigured or coerced endpoint cannot exfiltrate
+# the token via an unintended channel.
+
+
+def test_send_payload_rejects_http_by_default(monkeypatch):
+    """http:// endpoints are rejected without ever calling urlopen."""
+    called = {"n": 0}
+
+    def fake_urlopen(*args, **kwargs):
+        called["n"] += 1
+        raise AssertionError("urlopen must not be called for rejected scheme")
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    lg = _make_terminated_loop()
+    p = build_payload(lg)
+    ok = send_payload(
+        "http://telemetry.loopgain.ai/v1/aggregate",
+        token="my-token",
+        payload=p,
+        timeout=1.5,
+    )
+    assert ok is False
+    assert called["n"] == 0
+
+
+def test_send_payload_allows_http_with_allow_insecure_true(monkeypatch):
+    """http:// is permitted when allow_insecure=True (local-dev escape hatch)."""
+
+    class FakeResponse:
+        status = 202
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured["url"] = req.full_url
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    lg = _make_terminated_loop()
+    p = build_payload(lg)
+    ok = send_payload(
+        "http://localhost:8787/v1/aggregate",
+        token="my-token",
+        payload=p,
+        timeout=1.5,
+        allow_insecure=True,
+    )
+    assert ok is True
+    assert captured["url"] == "http://localhost:8787/v1/aggregate"
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "file:///etc/passwd",
+        "javascript:alert(1)",
+        "ftp://example.com/foo",
+        "data:text/plain,hello",
+        "gopher://example.com/",
+    ],
+)
+def test_send_payload_rejects_exotic_schemes(monkeypatch, endpoint):
+    """Non-http(s) schemes are rejected even when allow_insecure=True —
+    the bearer token must never leave via an unintended channel."""
+
+    def fake_urlopen(*args, **kwargs):
+        raise AssertionError("urlopen must not be called for rejected scheme")
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    lg = _make_terminated_loop()
+    p = build_payload(lg)
+    # Neither default nor allow_insecure=True should permit exotic schemes.
+    assert send_payload(endpoint, token="t", payload=p) is False
+    assert send_payload(endpoint, token="t", payload=p, allow_insecure=True) is False
+
+
+def test_send_payload_https_still_works_after_scheme_check(monkeypatch):
+    """The canonical https://telemetry.loopgain.ai path is unchanged."""
+
+    class FakeResponse:
+        status = 202
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    def fake_urlopen(req, timeout=None):
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    lg = _make_terminated_loop()
+    p = build_payload(lg)
+    ok = send_payload(
+        "https://telemetry.loopgain.ai/v1/aggregate",
+        token="my-token",
+        payload=p,
+    )
+    assert ok is True
+
+
+def test_send_telemetry_method_passes_through_allow_insecure(monkeypatch):
+    """LoopGain.send_telemetry plumbs allow_insecure through to send_payload."""
+
+    class FakeResponse:
+        status = 202
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured["url"] = req.full_url
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    lg = _make_terminated_loop()
+    # Without allow_insecure, http:// is rejected and urlopen is never called.
+    ok = lg.send_telemetry("http://localhost:8787/v1/aggregate", token="t")
+    assert ok is False
+    assert "url" not in captured
+
+    # With allow_insecure=True, the request goes through.
+    ok = lg.send_telemetry(
+        "http://localhost:8787/v1/aggregate",
+        token="t",
+        allow_insecure=True,
+    )
+    assert ok is True
+    assert captured["url"] == "http://localhost:8787/v1/aggregate"

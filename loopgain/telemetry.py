@@ -19,6 +19,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional
+from urllib.parse import urlparse
 
 if TYPE_CHECKING:
     from loopgain.core import LoopGain
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
 SCHEMA_VERSION = 2
 
 # Library version (kept in sync with __init__.py).
-LIBRARY_VERSION = "0.1.4"
+LIBRARY_VERSION = "0.1.5"
 
 
 def build_payload(
@@ -109,6 +110,7 @@ def send_payload(
     token: str,
     payload: dict[str, Any],
     timeout: float = 2.0,
+    allow_insecure: bool = False,
 ) -> bool:
     """POST a telemetry payload to the given endpoint.
 
@@ -117,15 +119,35 @@ def send_payload(
 
     Args:
         endpoint: Telemetry receiver URL (e.g.,
-            ``https://telemetry.loopgain.ai/v1/aggregate``).
+            ``https://telemetry.loopgain.ai/v1/aggregate``). Must use
+            ``https://``. ``http://`` is rejected unless ``allow_insecure``
+            is ``True``; all other schemes (``file://``, ``javascript:``,
+            ``ftp://``, etc.) are always rejected to keep the bearer token
+            from being smuggled out over an unintended channel.
         token: Bearer token issued by the receiver. Identifies the customer
             account; rotatable; not linked to any production secrets.
         payload: Dict from ``build_payload``.
         timeout: Per-request timeout in seconds. Default 2.0.
+        allow_insecure: If ``True``, permit ``http://`` endpoints. Intended
+            for local development against a self-hosted receiver on
+            ``http://localhost``. Default ``False``.
 
     Returns:
         ``True`` on 2xx response, ``False`` otherwise.
     """
+    # Refuse to attach the bearer token to anything but http(s); silently
+    # best-effort so a misconfigured endpoint can't break the user's loop.
+    try:
+        scheme = urlparse(endpoint).scheme.lower()
+    except Exception:
+        return False
+    if scheme == "https":
+        pass
+    elif scheme == "http" and allow_insecure:
+        pass
+    else:
+        return False
+
     try:
         body = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
