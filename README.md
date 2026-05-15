@@ -59,7 +59,14 @@ print(result.savings_vs_fixed_cap)
 
 ## How it works
 
-LoopGain measures empirical loop gain `Aβ = E(n) / E(n-1)` at every iteration. It smooths Aβ with a configurable EMA and classifies the result into five named bands:
+LoopGain measures empirical loop gain at every iteration, then smooths it with an EMA:
+
+```
+Aβ(n)     = E(n) / E(n-1)
+Aβ_smooth = EMA(Aβ, w=3)
+```
+
+It classifies `Aβ_smooth` into five named bands:
 
 | `Aβ_smooth` range | State | Action |
 | --- | --- | --- |
