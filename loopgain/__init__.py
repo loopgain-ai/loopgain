@@ -9,6 +9,7 @@ Public API:
     result = lg.result
 """
 
+from loopgain._version import __version__
 from loopgain.core import (
     LoopGain,
     LoopGainResult,
@@ -23,8 +24,6 @@ from loopgain.core import (
     MAX_ITERATIONS,
 )
 from loopgain.telemetry import build_payload as build_telemetry_payload
-
-__version__ = "0.1.7"
 
 __all__ = [
     "LoopGain",
