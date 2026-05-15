@@ -279,7 +279,7 @@ def test_send_payload_constructs_correct_request(monkeypatch):
         captured["timeout"] = timeout
         return FakeResponse()
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("loopgain.telemetry._open_request", fake_urlopen)
 
     lg = _make_terminated_loop()
     p = build_payload(lg, workload_id="test")
@@ -321,7 +321,7 @@ def test_send_payload_rejects_http_by_default(monkeypatch):
         called["n"] += 1
         raise AssertionError("urlopen must not be called for rejected scheme")
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("loopgain.telemetry._open_request", fake_urlopen)
 
     lg = _make_terminated_loop()
     p = build_payload(lg)
@@ -353,7 +353,7 @@ def test_send_payload_allows_http_with_allow_insecure_true(monkeypatch):
         captured["url"] = req.full_url
         return FakeResponse()
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("loopgain.telemetry._open_request", fake_urlopen)
 
     lg = _make_terminated_loop()
     p = build_payload(lg)
@@ -385,7 +385,7 @@ def test_send_payload_rejects_exotic_schemes(monkeypatch, endpoint):
     def fake_urlopen(*args, **kwargs):
         raise AssertionError("urlopen must not be called for rejected scheme")
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("loopgain.telemetry._open_request", fake_urlopen)
 
     lg = _make_terminated_loop()
     p = build_payload(lg)
@@ -409,7 +409,7 @@ def test_send_payload_https_still_works_after_scheme_check(monkeypatch):
     def fake_urlopen(req, timeout=None):
         return FakeResponse()
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("loopgain.telemetry._open_request", fake_urlopen)
 
     lg = _make_terminated_loop()
     p = build_payload(lg)
@@ -522,7 +522,7 @@ def test_send_telemetry_passes_classification_fields(monkeypatch):
         captured["body"] = req.data
         return FakeResponse()
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("loopgain.telemetry._open_request", fake_urlopen)
 
     lg = _make_terminated_loop()
     ok = lg.send_telemetry(
@@ -557,7 +557,7 @@ def test_send_telemetry_can_disable_per_iteration(monkeypatch):
         captured["body"] = req.data
         return FakeResponse()
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("loopgain.telemetry._open_request", fake_urlopen)
 
     lg = _make_terminated_loop()
     ok = lg.send_telemetry(
@@ -591,7 +591,7 @@ def test_send_telemetry_method_passes_through_allow_insecure(monkeypatch):
         captured["url"] = req.full_url
         return FakeResponse()
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("loopgain.telemetry._open_request", fake_urlopen)
 
     lg = _make_terminated_loop()
     # Without allow_insecure, http:// is rejected and urlopen is never called.
@@ -607,3 +607,33 @@ def test_send_telemetry_method_passes_through_allow_insecure(monkeypatch):
     )
     assert ok is True
     assert captured["url"] == "http://localhost:8787/v1/aggregate"
+
+
+def test_send_payload_refuses_redirects():
+    """The bearer token must never be sent across a 30x redirect.
+
+    Regression: ``urllib`` follows redirects by default and does NOT strip
+    the Authorization header on cross-origin hops. If the configured
+    endpoint were compromised, a 302 to ``attacker.com`` would harvest
+    the token. ``_open_request`` uses a no-redirect opener so any 3xx
+    surfaces as a failed delivery instead of a leak.
+    """
+    import io
+    import urllib.error
+    import urllib.request
+
+    from loopgain.telemetry import _NoRedirectHandler
+
+    handler = _NoRedirectHandler()
+    # Each of the standard redirect codes must raise an HTTPError, which
+    # `send_payload`'s outer `except Exception:` then converts to `False`.
+    for method in (
+        handler.http_error_301,
+        handler.http_error_302,
+        handler.http_error_303,
+        handler.http_error_307,
+        handler.http_error_308,
+    ):
+        req = urllib.request.Request("https://example.com/")
+        with pytest.raises(urllib.error.HTTPError):
+            method(req, io.BytesIO(b""), 302, "Found", {})

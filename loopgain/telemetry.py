@@ -28,6 +28,39 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlparse
 
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Refuse to follow HTTP redirects.
+
+    ``urllib`` follows 3xx responses by default and does NOT strip the
+    Authorization header on cross-origin redirects. If the configured
+    telemetry endpoint were compromised, it could 302 to ``attacker.com``
+    and harvest the bearer token. We treat any 3xx as a failed delivery —
+    the caller's loop is not affected (``send_payload`` swallows it).
+    """
+
+    def http_error_301(self, req, fp, code, msg, headers):  # type: ignore[override]
+        raise urllib.error.HTTPError(req.full_url, code, "redirect refused", headers, fp)
+
+    http_error_302 = http_error_301
+    http_error_303 = http_error_301
+    http_error_307 = http_error_301
+    http_error_308 = http_error_301
+
+
+_NO_REDIRECT_OPENER = urllib.request.build_opener(_NoRedirectHandler())
+
+
+def _open_request(req: urllib.request.Request, timeout: float) -> Any:
+    """Single seam for the outbound HTTP call.
+
+    Production uses ``_NO_REDIRECT_OPENER`` so the bearer can never be
+    leaked via a 30x. Tests monkey-patch this function (not
+    ``urllib.request.urlopen``) when they need to inspect the outgoing
+    request without doing real network I/O.
+    """
+    return _NO_REDIRECT_OPENER.open(req, timeout=timeout)
+
 if TYPE_CHECKING:
     from loopgain.core import LoopGain
 
@@ -40,8 +73,11 @@ if TYPE_CHECKING:
 # are still accepted (new fields default to None / NULL).
 SCHEMA_VERSION = 3
 
-# Library version (kept in sync with __init__.py).
-LIBRARY_VERSION = "0.1.7"
+
+# Library version sourced from loopgain._version so there's exactly one
+# string to bump per release. _version.py has no project imports, so this
+# is safe to import at module load.
+from loopgain._version import __version__ as LIBRARY_VERSION
 
 # Cap on per-iteration trajectory length sent to telemetry. Loops longer than
 # this are truncated to the first PER_ITERATION_CAP entries with a
@@ -214,7 +250,9 @@ def send_payload(
                 "User-Agent": f"loopgain/{LIBRARY_VERSION}",
             },
         )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        # Use the no-redirect seam so a malicious or misconfigured
+        # endpoint can't 302 the bearer token to a different host.
+        with _open_request(req, timeout) as resp:
             return 200 <= resp.status < 300
     except Exception:
         # Best-effort: never break the user's loop because telemetry failed.
