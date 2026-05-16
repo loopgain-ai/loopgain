@@ -119,6 +119,28 @@ def test_payload_workload_id_optional():
     assert p["workload_id"] is None
 
 
+def test_payload_serializes_strict_json_for_constant_error_trajectory():
+    """A constant-error trajectory pushes gain_margin to +inf (1/max(Aβ)=1/0).
+
+    Standard JSON forbids Infinity / NaN, and the receiver rejects payloads
+    that include them. The build_payload sanitizer must coerce non-finite
+    floats to None so the payload still round-trips through a strict parser.
+    """
+    lg = LoopGain(max_iterations=5)
+    for _ in range(5):
+        if not lg.should_continue():
+            break
+        lg.observe(0.0, output="x")
+    p = build_payload(lg)
+    # Strict round-trip: allow_nan=False raises on inf/nan.
+    encoded = json.dumps(p, allow_nan=False)
+    decoded = json.loads(encoded)
+    assert decoded["loop"]["gain_margin"] is None
+    # Per-iteration Aβ values can also be non-finite (E(n)/E(n-1) with E(n-1)=0).
+    for v in decoded["per_iteration"]["convergence_profile"]:
+        assert v is None or isinstance(v, (int, float))
+
+
 def test_payload_thresholds_included():
     """Threshold values are sent so the receiver knows the config used."""
     lg = _make_terminated_loop()
@@ -449,10 +471,11 @@ def test_payload_per_iteration_truncates_at_cap():
 
     # Drive a long-running CONVERGING loop: Aβ ≈ 0.7 throughout, which
     # stays under the STALLING threshold so the loop never terminates on
-    # OSCILLATING. target_error=0 disables TARGET_MET; max_iterations
-    # caps it past PER_ITERATION_CAP so the trajectory exceeds the cap.
+    # OSCILLATING. target_error=None disables the short-circuit so the
+    # geometric decay never triggers TARGET_MET; max_iterations caps it
+    # past PER_ITERATION_CAP so the trajectory exceeds the cap.
     n = PER_ITERATION_CAP + 50
-    lg = LoopGain(target_error=0.0, max_iterations=n)
+    lg = LoopGain(target_error=None, max_iterations=n)
     err = 1.0
     for _ in range(n):
         if not lg.should_continue():

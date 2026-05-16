@@ -113,8 +113,9 @@ class LoopGainResult:
     """First non-None ``eta`` snapshot captured during the loop —
     the predicted iterations-remaining at the moment the prediction
     became computable. ``None`` if no prediction was ever made
-    (e.g., ``target_error == 0``, loop never converged toward target,
-    or the loop terminated before two observations)."""
+    (e.g., ``target_error`` is ``None`` or ``0`` so the prediction
+    formula is undefined, loop never converged toward target, or the
+    loop terminated before two observations)."""
 
     first_eta_at_iteration: Optional[int] = None
     """Iteration count when ``first_eta_prediction`` was captured.
@@ -149,7 +150,11 @@ class LoopGain:
 
     Args:
         target_error: Stop when an observed error drops at or below this.
-            Default ``0.0`` means "never stop early on target met."
+            Default ``0.0`` short-circuits on exactly zero error — the
+            natural completion signal for most verifiers (no failing
+            tests, no validation errors, etc.). Pass ``None`` to disable
+            the short-circuit entirely and rely only on stability
+            detection and ``max_iterations``.
         max_iterations: Hard safety cap. Default ``None`` (rely on
             stability detection). Recommended ~20-50 for production.
         thresholds: Custom ``ThresholdBands``. Default is the canonical
@@ -161,7 +166,7 @@ class LoopGain:
 
     def __init__(
         self,
-        target_error: float = 0.0,
+        target_error: Optional[float] = 0.0,
         max_iterations: Optional[int] = None,
         thresholds: Optional[ThresholdBands] = None,
         smoothing_window: int = 3,
@@ -169,12 +174,14 @@ class LoopGain:
     ) -> None:
         if smoothing_window < 1:
             raise ValueError("smoothing_window must be >= 1")
-        if target_error < 0:
-            raise ValueError("target_error must be non-negative")
+        if target_error is not None and target_error < 0:
+            raise ValueError("target_error must be non-negative or None")
         if max_iterations is not None and max_iterations < 1:
             raise ValueError("max_iterations must be >= 1 or None")
 
-        self.target_error = float(target_error)
+        self.target_error: Optional[float] = (
+            float(target_error) if target_error is not None else None
+        )
         self.max_iterations = max_iterations
         self.thresholds = thresholds or ThresholdBands()
         self.smoothing_window = smoothing_window
@@ -217,7 +224,9 @@ class LoopGain:
         self._outputs.append(output)
 
         # TARGET_MET short-circuit takes precedence over band classification.
-        if magnitude <= self.target_error and self.target_error > 0:
+        # target_error=None disables the short-circuit entirely; any non-None
+        # value (including 0.0) fires TARGET_MET when magnitude <= target.
+        if self.target_error is not None and magnitude <= self.target_error:
             self._state = TARGET_MET
             self._terminal = True
             return self._state
@@ -289,12 +298,13 @@ class LoopGain:
             n_remaining = log(E_target / E_current) / log(Aβ_smooth)
 
         Returns ``None`` when the prediction isn't well-defined:
-        no Aβ yet, ``target_error`` is zero, target already met, or
-        ``Aβ_smooth >= 1`` (non-converging gain).
+        no Aβ yet, ``target_error`` is ``None`` (no target to predict
+        against) or ``0`` (the formula has a log-of-zero singularity),
+        target already met, or ``Aβ_smooth >= 1`` (non-converging gain).
         """
         if not self._smoothed_history or not self._error_history:
             return None
-        if self.target_error <= 0:
+        if self.target_error is None or self.target_error <= 0:
             return None
         e_current = self._error_history[-1]
         if e_current <= self.target_error:

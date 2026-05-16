@@ -78,7 +78,7 @@ It classifies `Aβ_smooth` into five named bands:
 | `0.95 ≤ Aβ ≤ 1.05` | `OSCILLATING` | Break — return best-so-far |
 | `> 1.05` | `DIVERGING` | Abort — roll back to best-so-far |
 
-Plus a short-circuit: if observed error drops at or below `target_error`, the loop stops immediately with state `TARGET_MET`.
+Plus a short-circuit: if observed error drops at or below `target_error`, the loop stops immediately with state `TARGET_MET`. The default `target_error=0.0` short-circuits on exactly zero error — the natural completion signal for verifier-driven loops. Pass `target_error=None` to disable the short-circuit and rely on stability detection alone.
 
 The `±0.05` noise band around `Aβ=1` absorbs stochastic jitter from agent outputs without triggering false-positive aborts. The `0.85` `STALLING` boundary is an early warning — by the time `Aβ` crosses `1.0`, you've already wasted iterations.
 
@@ -118,7 +118,7 @@ This transforms divergence detection from "abort with garbage" into "abort with 
 
 Construct the monitor.
 
-- `target_error` — Stop when an observed error drops at or below this. Default `0.0` means "never short-circuit on target met."
+- `target_error` — Stop when an observed error drops at or below this. Default `0.0` short-circuits on exactly zero error (the natural completion signal for verifier-driven loops). Pass `None` to disable the short-circuit entirely.
 - `max_iterations` — Hard safety cap. Default `None` (rely on stability detection). Recommended ~20–50 for production.
 - `thresholds` — Custom `ThresholdBands` if defaults don't fit your domain.
 - `smoothing_window` — EMA window for the smoothed Aβ. Default 3.

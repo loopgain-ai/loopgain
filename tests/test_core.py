@@ -121,13 +121,24 @@ def test_target_met_short_circuits():
     assert lg.result.outcome == "converged"
 
 
-def test_target_met_zero_is_disabled():
-    """target_error=0 should NOT trigger TARGET_MET on a zero observation."""
-    lg = LoopGain(target_error=0.0, max_iterations=5)
+def test_target_error_zero_fires_target_met_on_exact_zero():
+    """Default target_error=0.0 short-circuits when error hits exactly zero —
+    the natural completion signal for verifier-driven loops (no failing
+    tests, no validation errors, etc.)."""
+    lg = LoopGain(max_iterations=5)  # default target_error=0.0
     lg.observe(10.0)
     state = lg.observe(0.0)
-    # With target_error=0, zero error does not stop the loop early via TARGET_MET.
-    # (It might trigger DIVERGING/etc via Aβ math, but not TARGET_MET.)
+    assert state == TARGET_MET
+    assert not lg.should_continue()
+
+
+def test_target_error_none_disables_short_circuit():
+    """Passing target_error=None disables the short-circuit entirely;
+    only stability detection and max_iterations terminate the loop."""
+    lg = LoopGain(target_error=None, max_iterations=5)
+    lg.observe(10.0)
+    state = lg.observe(0.0)
+    # Zero observation does NOT trigger TARGET_MET with target_error=None.
     assert state != TARGET_MET
 
 

@@ -127,9 +127,9 @@ def test_very_large_error_magnitudes():
 
 
 def test_zero_error_in_middle_of_run_anomalous():
-    """If error drops to zero but target_error=0, that's anomalous — the next
-    observe must not divide by zero."""
-    lg = LoopGain(target_error=0.0, max_iterations=10)
+    """When the short-circuit is disabled (target_error=None) and an error
+    drops to zero mid-run, the next observe must not divide by zero."""
+    lg = LoopGain(target_error=None, max_iterations=10)
     lg.observe(10.0)
     lg.observe(0.0)  # Aβ = 0; this is fine
     # Subsequent non-zero observation: Aβ = magnitude / 0 — must be handled.
@@ -142,8 +142,9 @@ def test_zero_error_in_middle_of_run_anomalous():
 
 
 def test_two_consecutive_zero_errors():
-    """0 followed by 0 → Aβ = 0/0 → handled by impl as Aβ=0 (still converging)."""
-    lg = LoopGain(target_error=0.0, max_iterations=5)
+    """0 followed by 0 with short-circuit disabled → Aβ = 0/0 → handled
+    by impl as Aβ=0 (still converging)."""
+    lg = LoopGain(target_error=None, max_iterations=5)
     lg.observe(0.0)
     state = lg.observe(0.0)
     # 0/0 → 0.0 per the impl; state is FAST_CONVERGE.
@@ -255,8 +256,9 @@ def test_observe_handles_tuple():
 
 
 def test_observe_handles_empty_sequence():
-    """Empty sequence → magnitude 0. With target_error=0, doesn't short-circuit."""
-    lg = LoopGain(target_error=0.0, max_iterations=3)
+    """Empty sequence → magnitude 0. With target_error=None, doesn't
+    short-circuit so multiple zero-magnitude observations can be made."""
+    lg = LoopGain(target_error=None, max_iterations=3)
     lg.observe([])  # magnitude = 0
     # Sequel observations should not crash.
     lg.observe([])

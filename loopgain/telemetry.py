@@ -21,12 +21,30 @@ to keep the data fully under their control.
 from __future__ import annotations
 
 import json
+import math
 import statistics
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlparse
+
+
+def _safe_float(x: Any) -> Any:
+    """Coerce inf / -inf / NaN to None so the payload stays strict JSON.
+
+    Standard JSON (RFC 8259) forbids Infinity and NaN literals. Python's
+    json.dumps emits them by default, and strict parsers — including the
+    Cloudflare-side receiver — reject the payload. gain_margin in particular
+    is 1/max(Aβ_smooth) and goes to +inf whenever the smoothed gain is zero
+    (e.g. a constant-error trajectory). Aβ values themselves can go to inf
+    if a previous error is exactly zero. Collapsing to None keeps the
+    dashboard's "no data" semantics intact instead of dropping the whole
+    payload.
+    """
+    if isinstance(x, float) and not math.isfinite(x):
+        return None
+    return x
 
 
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -134,9 +152,9 @@ def build_payload(
     profile = result.convergence_profile
     if profile:
         profile_summary = {
-            "min": min(profile),
-            "max": max(profile),
-            "median": statistics.median(profile),
+            "min": _safe_float(min(profile)),
+            "max": _safe_float(max(profile)),
+            "median": _safe_float(statistics.median(profile)),
             "samples": len(profile),
         }
     else:
@@ -156,7 +174,7 @@ def build_payload(
         "loop": {
             "outcome": result.outcome,
             "iterations_used": result.iterations_used,
-            "gain_margin": result.gain_margin,
+            "gain_margin": _safe_float(result.gain_margin),
             "savings_vs_fixed_cap": result.savings_vs_fixed_cap,
             "convergence_profile_summary": profile_summary,
             "rollback_triggered": result.outcome in ("oscillating", "diverged"),
@@ -186,8 +204,8 @@ def build_payload(
         ab = result.convergence_profile
         truncated = len(errors) > PER_ITERATION_CAP or len(ab) > PER_ITERATION_CAP
         payload["per_iteration"] = {
-            "error_history": list(errors[:PER_ITERATION_CAP]),
-            "convergence_profile": list(ab[:PER_ITERATION_CAP]),
+            "error_history": [_safe_float(e) for e in errors[:PER_ITERATION_CAP]],
+            "convergence_profile": [_safe_float(a) for a in ab[:PER_ITERATION_CAP]],
             "truncated": truncated,
             "cap": PER_ITERATION_CAP,
         }

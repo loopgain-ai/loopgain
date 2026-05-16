@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "loopgain"
-version = "0.1.8"
+version = "0.1.9"
 description = "Barkhausen stability monitor for AI agent loops. Real-time loop-gain (Aβ) monitoring with five named threshold bands, best-so-far rollback, and ETA prediction."
 authors = [{name = "Dave Fitzsimmons", email = "hello@loopgain.ai"}]
 readme = "README.md"
@@ -78,6 +78,10 @@ langgraph = ["langgraph>=0.2"]
 crewai = ["crewai>=0.30"]
 autogen = ["autogen-agentchat>=0.4"]
 all = ["langgraph>=0.2", "crewai>=0.30", "autogen-agentchat>=0.4"]
+# Dependencies for the runnable scripts under examples/ (real Claude calls
+# via the Anthropic SDK). Not a runtime dep — `pip install loopgain` stays
+# zero-dep. Install with `pip install 'loopgain[examples]'`.
+examples = ["anthropic>=0.40.0"]
 
 [tool.setuptools.packages.find]
 where = ["."]

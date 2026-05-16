@@ -6,4 +6,4 @@ Both ``loopgain/__init__.py`` and ``loopgain/telemetry.py`` import
 Update this file (and ``pyproject.toml``) for each release.
 """
 
-__version__ = "0.1.8"
+__version__ = "0.1.9"
