@@ -107,8 +107,8 @@ def build_payload(
             customer. Default ``None``.
         timestamp: When the loop ran. Defaults to current UTC, hour-bucketed.
         framework: Optional classification label naming the agent framework
-            (``"langgraph"``, ``"crewai"``, ``"autogen"``, ``"vesper"``, etc.).
-            Adapters auto-stamp this; raw API users may pass it manually.
+            (``"langgraph"``, ``"crewai"``, ``"autogen"``, etc.). Adapters
+            auto-stamp this; raw API users may pass it manually.
         loop_type: Optional classification label naming the loop pattern
             (``"verify_revise"``, ``"rag_refine"``, ``"tool_use_retry"``,
             etc.). Free-form; used for filtering in the dashboard.

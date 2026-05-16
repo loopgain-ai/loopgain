@@ -7,7 +7,9 @@ Replace `max_iterations=5` with a real-time loop-gain (`Aβ`) monitor that knows
 [![PyPI](https://img.shields.io/pypi/v/loopgain.svg)](https://pypi.org/project/loopgain/)
 [![Python](https://img.shields.io/pypi/pyversions/loopgain.svg)](https://pypi.org/project/loopgain/)
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-73_passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-119_passing-brightgreen.svg)](tests/)
+
+**Home:** [loopgain.ai](https://loopgain.ai)
 
 Works for **any iterative AI workflow with a measurable error signal** — verify-revise loops, refinement passes, tool-use retry chains, RAG with self-correction, code-gen with linter feedback, multi-step reasoning loops. **Pre-built adapters for [LangGraph](#langgraph), [CrewAI](#crewai), and [AutoGen](#autogen-v04)**; drop-in via the raw API for **Claude Agent SDK** and any custom stack. Pure Python, no runtime dependencies.
 
@@ -146,9 +148,9 @@ Predicted iterations to reach target. `None` when not well-defined.
 
 Terminal result with `outcome`, `iterations_used`, `best_index`, `best_output`, `best_error`, `convergence_profile`, `error_history`, `gain_margin`, `savings_vs_fixed_cap`. Safe to call mid-loop.
 
-### `lg.send_telemetry(endpoint, token, workload_id=None, timeout=2.0) -> bool`
+### `lg.send_telemetry(endpoint, token, workload_id=None, timeout=2.0, allow_insecure=False, framework=None, loop_type=None, team=None, include_per_iteration=True) -> bool`
 
-**Opt-in.** Send a single anonymized telemetry POST after the loop terminates. Best-effort — never raises, returns `True` on 2xx, `False` otherwise.
+**Opt-in.** Send a single anonymized telemetry POST after the loop terminates. Best-effort — never raises, returns `True` on 2xx, `False` otherwise. Adapters auto-stamp `framework`; `loop_type` and `team` are free-form labels that surface as filters in the dashboard. Pass `include_per_iteration=False` to send aggregate summary only.
 
 ```python
 import os
@@ -287,7 +289,7 @@ For frameworks without an adapter, the raw `LoopGain.observe()` API works agains
 
 ## Status
 
-**Initial public release.** Core library shipped (current version: see the PyPI badge at the top). Framework adapters (LangGraph, CrewAI, AutoGen) and the cloud-aggregator dashboard come in v0.2+. The math and the API surface are stable.
+**Initial public release.** Core library shipped (current version: see the PyPI badge at the top). Framework adapters (LangGraph, CrewAI, AutoGen) are installable as optional extras. The cloud-aggregator [telemetry receiver](https://github.com/loopgain-ai/telemetry-receiver) and [dashboard](https://github.com/loopgain-ai/dashboard) are live as separate open-source repos. The math and the API surface are stable.
 
 This is alpha software. The API may break before 1.0 if production usage surfaces design issues; pin the version.
 
