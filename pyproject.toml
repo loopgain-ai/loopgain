@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "loopgain"
-version = "0.1.9"
+version = "0.2.0"
 description = "Barkhausen stability monitor for AI agent loops. Real-time loop-gain (Aβ) monitoring with five named threshold bands, best-so-far rollback, and ETA prediction."
 authors = [{name = "Dave Fitzsimmons", email = "hello@loopgain.ai"}]
 readme = "README.md"
@@ -46,6 +46,10 @@ keywords = [
     "langgraph",
     "crewai",
     "autogen",
+    "langchain",
+    "openai-agents",
+    "openai-agents-sdk",
+    "claude-agent-sdk",
     "claude",
     "anthropic",
     "openai",
@@ -77,7 +81,17 @@ test = ["pytest>=7.0"]
 langgraph = ["langgraph>=0.2"]
 crewai = ["crewai>=0.30"]
 autogen = ["autogen-agentchat>=0.4"]
-all = ["langgraph>=0.2", "crewai>=0.30", "autogen-agentchat>=0.4"]
+langchain = ["langchain>=1.0"]
+openai-agents = ["openai-agents>=0.1"]
+claude-agent-sdk = ["claude-agent-sdk>=0.2"]
+all = [
+    "langgraph>=0.2",
+    "crewai>=0.30",
+    "autogen-agentchat>=0.4",
+    "langchain>=1.0",
+    "openai-agents>=0.1",
+    "claude-agent-sdk>=0.2",
+]
 # Dependencies for the runnable scripts under examples/ (real Claude calls
 # via the Anthropic SDK). Not a runtime dep — `pip install loopgain` stays
 # zero-dep. Install with `pip install 'loopgain[examples]'`.
@@ -91,5 +105,5 @@ exclude = ["tests*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "integration: tests that import a real framework (langgraph, crewai, autogen). Skipped automatically when the framework isn't installed.",
+    "integration: tests that import a real framework (langgraph, crewai, autogen, langchain, openai-agents, claude-agent-sdk). Skipped automatically when the framework isn't installed.",
 ]

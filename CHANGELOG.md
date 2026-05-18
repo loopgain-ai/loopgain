@@ -6,6 +6,32 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-05-18
+
+### Added
+- **Three new framework adapters.** LoopGain now ships pre-built
+  integrations for six major agent frameworks (up from three):
+  - **LangChain** (`pip install 'loopgain[langchain]'`) — duck-types
+    against any `langchain.agents.create_agent()` result (v1+) or the
+    legacy `AgentExecutor`. Forwards `**stream_kwargs` verbatim so the
+    user controls chunk shape. Sync + async paths.
+  - **OpenAI Agents SDK** (`pip install 'loopgain[openai-agents]'`) —
+    wraps `Runner.run_streamed(agent, input).stream_events()`. Async-first
+    with a `run_sync` helper. Default observation filter limits
+    `error_fn` to `run_item_stream_event` (override via
+    `observe_event_types`). Best-effort calls `.cancel()` on the
+    underlying `RunResultStreaming` at terminal state.
+  - **Claude Agent SDK** (`pip install 'loopgain[claude-agent-sdk]'`) —
+    wraps `claude_agent_sdk.query(prompt=..., options=...)`. Accepts
+    either a `prompt` (constructs the iterator internally) or a
+    pre-built `message_iterator` (for `ClaudeSDKClient.receive_messages()`
+    callers). Default observation filter limits `error_fn` to
+    `AssistantMessage` (override via `observe_message_types`).
+- Real-framework integration smoke tests for each new adapter
+  (skipped if the framework isn't installed in the test environment).
+- README adapter section grew to six stanzas; landing page (loopgain.ai)
+  updated in lockstep.
+
 ## [0.1.9] — 2026-05-16
 
 ### Changed

@@ -11,7 +11,7 @@ Replace `max_iterations=5` with a real-time loop-gain (`Aβ`) monitor that knows
 
 **Home:** [loopgain.ai](https://loopgain.ai)
 
-Works for **any iterative AI workflow with a measurable error signal** — verify-revise loops, refinement passes, tool-use retry chains, RAG with self-correction, code-gen with linter feedback, multi-step reasoning loops. **Pre-built adapters for [LangGraph](#langgraph), [CrewAI](#crewai), and [AutoGen](#autogen-v04)**; drop-in via the raw API for **Claude Agent SDK** and any custom stack. Pure Python, no runtime dependencies.
+Works for **any iterative AI workflow with a measurable error signal** — verify-revise loops, refinement passes, tool-use retry chains, RAG with self-correction, code-gen with linter feedback, multi-step reasoning loops. **Pre-built adapters for [LangGraph](#langgraph), [CrewAI](#crewai), [AutoGen](#autogen-v04), [LangChain](#langchain), [OpenAI Agents SDK](#openai-agents-sdk), and [Claude Agent SDK](#claude-agent-sdk)**; drop-in via the raw API for any custom stack. Pure Python, no runtime dependencies.
 
 **Keywords:** AI agent loops · agentic AI · infinite loop detection · divergence detection · early stopping · convergence · agent orchestration · LLM stability · generator-verifier-reviser · feedback-loop control.
 
@@ -191,10 +191,13 @@ The hosted endpoint at `telemetry.loopgain.ai` is one acceptable destination. Th
 Thin wrappers under `loopgain.integrations` drive each major agent framework's iteration with a `LoopGain` monitor and auto-stamp `framework="<name>"` on telemetry. The frameworks themselves are **optional dependencies** — install the extra you need:
 
 ```bash
-pip install 'loopgain[langgraph]'   # LangGraph
-pip install 'loopgain[crewai]'      # CrewAI
-pip install 'loopgain[autogen]'     # AutoGen v0.4+
-pip install 'loopgain[all]'         # all three
+pip install 'loopgain[langgraph]'          # LangGraph
+pip install 'loopgain[crewai]'             # CrewAI
+pip install 'loopgain[autogen]'            # AutoGen v0.4+
+pip install 'loopgain[langchain]'          # LangChain (create_agent / AgentExecutor)
+pip install 'loopgain[openai-agents]'      # OpenAI Agents SDK
+pip install 'loopgain[claude-agent-sdk]'   # Anthropic Claude Agent SDK
+pip install 'loopgain[all]'                # all six
 ```
 
 All adapters take a `LoopGain` instance plus an `error_fn` you provide — the framework doesn't know what your error signal is, so the adapter doesn't either. `error_fn` returns a non-negative number (or `None` to skip an iteration).
@@ -281,15 +284,120 @@ lg.send_telemetry(
 
 Pass a `cancellation_token` to `adapter.run(...)` and the adapter will cancel it when LoopGain reaches a terminal state (target met, oscillation, divergence). The legacy v0.2 `ConversableAgent.initiate_chat` API is **not** supported — use the v0.4 event-driven runtime.
 
+### LangChain
+
+Duck-types against any LangChain agent that exposes `.stream(input, **kwargs)` / `.astream(input, **kwargs)` — both the current `langchain.agents.create_agent()` (v1+) and the legacy `AgentExecutor`. The adapter forwards `**stream_kwargs` verbatim, so the chunk shape your `error_fn` sees is the one your agent emits.
+
+```python
+from langchain.agents import create_agent
+from loopgain import LoopGain
+from loopgain.integrations import LangChainAdapter
+
+agent = create_agent(model="gpt-5-nano", tools=[get_weather])
+lg = LoopGain(target_error=0.0, max_iterations=20)
+
+def error_fn(chunk):
+    if chunk.get("type") != "updates":
+        return None
+    # Count unresolved tool calls; drops to 0 once the agent stops calling tools.
+    return sum(
+        1 for _, update in chunk["data"].items()
+        if getattr(update.get("messages", [None])[-1], "tool_calls", None)
+    )
+
+adapter = LangChainAdapter(lg=lg, error_fn=error_fn)
+final = adapter.run(
+    agent,
+    {"messages": [{"role": "user", "content": "What's the weather?"}]},
+    stream_mode="updates",
+    version="v2",
+)
+
+lg.send_telemetry(
+    endpoint=...,
+    token=...,
+    framework=adapter.framework_name,        # "langchain"
+)
+```
+
+For legacy `AgentExecutor`: just drop the `stream_mode` / `version` kwargs; each yielded chunk is an `AddableDict` per step (parse `intermediate_steps` or the terminal `output` key in your `error_fn`).
+
+### OpenAI Agents SDK
+
+Wraps `Runner.run_streamed(agent, input).stream_events()`. The SDK is async-first; the adapter mirrors that. A `run_sync` helper wraps the async path with `asyncio.run` for synchronous callers.
+
+```python
+from agents import Agent, function_tool
+from loopgain import LoopGain
+from loopgain.integrations import OpenAIAgentsAdapter
+
+agent = Agent(name="Reviser", instructions="...", tools=[...])
+
+lg = LoopGain(target_error=0.0, max_iterations=20)
+
+def error_fn(event):
+    # Default observes only run_item_stream_event; pull the verifier's
+    # reported failure count off tool outputs.
+    if event.item.type == "tool_call_output_item":
+        return float(event.item.output.get("failures", 0))
+    return None
+
+adapter = OpenAIAgentsAdapter(lg=lg, error_fn=error_fn)
+result = await adapter.run(agent, input="Fix the bug.")
+print(result.final_output)
+
+lg.send_telemetry(
+    endpoint=...,
+    token=...,
+    framework=adapter.framework_name,        # "openai-agents"
+)
+```
+
+By default the adapter only forwards `run_item_stream_event` to `error_fn` — pass `observe_event_types=None` to see every event (including raw token deltas and agent-handoff notifications). When LoopGain reaches a terminal state, the adapter best-effort calls `.cancel()` on the underlying `RunResultStreaming`.
+
+### Claude Agent SDK
+
+Wraps Anthropic's `claude_agent_sdk.query(prompt=..., options=...)` async iterator. By default observes only `AssistantMessage` (skips `UserMessage` / `SystemMessage` / `ResultMessage`); override with `observe_message_types=None` or a custom tuple.
+
+```python
+from claude_agent_sdk import ClaudeAgentOptions, TextBlock
+from loopgain import LoopGain
+from loopgain.integrations import ClaudeAgentSDKAdapter
+
+def error_fn(message):
+    # Count `FAIL:` markers a self-verifying persona emits.
+    for block in getattr(message, "content", []):
+        if isinstance(block, TextBlock):
+            return float(block.text.count("FAIL:"))
+    return None
+
+lg = LoopGain(target_error=0.0, max_iterations=20)
+adapter = ClaudeAgentSDKAdapter(lg=lg, error_fn=error_fn)
+
+options = ClaudeAgentOptions(system_prompt="Self-verify each draft.")
+result = await adapter.run(
+    prompt="Write a haiku about feedback loops.",
+    options=options,
+)
+
+lg.send_telemetry(
+    endpoint=...,
+    token=...,
+    framework=adapter.framework_name,        # "claude-agent-sdk"
+)
+```
+
+For the bidirectional `ClaudeSDKClient` use case, pass `message_iterator=client.receive_messages()` instead of `prompt=...`.
+
 ### Custom integrations
 
-For frameworks without an adapter, the raw `LoopGain.observe()` API works against any iterable. The adapters are 100-200 lines each — copy one of `loopgain/integrations/{langgraph,crewai,autogen}.py` as a starting point.
+For frameworks without an adapter, the raw `LoopGain.observe()` API works against any iterable. The adapters are 100-200 lines each — copy one of `loopgain/integrations/{langgraph,crewai,autogen,langchain,openai_agents,claude_agent_sdk}.py` as a starting point.
 
 ---
 
 ## Status
 
-**Initial public release.** Core library shipped (current version: see the PyPI badge at the top). Framework adapters (LangGraph, CrewAI, AutoGen) are installable as optional extras. The cloud-aggregator [telemetry receiver](https://github.com/loopgain-ai/telemetry-receiver) and [dashboard](https://github.com/loopgain-ai/dashboard) are live as separate open-source repos. The math and the API surface are stable.
+**Initial public release.** Core library shipped (current version: see the PyPI badge at the top). Framework adapters (LangGraph, CrewAI, AutoGen, LangChain, OpenAI Agents SDK, Claude Agent SDK) are installable as optional extras. The cloud-aggregator [telemetry receiver](https://github.com/loopgain-ai/telemetry-receiver) and [dashboard](https://github.com/loopgain-ai/dashboard) are live as separate open-source repos. The math and the API surface are stable.
 
 This is alpha software. The API may break before 1.0 if production usage surfaces design issues; pin the version.
 

@@ -5,22 +5,26 @@ calls ``LoopGain.observe()`` on each step with an error magnitude derived
 from a user-provided ``error_fn``, and (optionally) sends telemetry on
 completion with ``framework="<name>"`` auto-stamped.
 
-Adapters are isolated submodules so the host frameworks (langgraph, crewai,
-autogen) remain *optional* dependencies. Importing this package does not
-import any framework — each adapter only imports its framework when its
-class is instantiated, and surfaces a clear ``ImportError`` if missing.
+Adapters are isolated submodules so the host frameworks (langgraph,
+crewai, autogen, langchain, openai-agents, claude-agent-sdk) remain
+*optional* dependencies. Importing this package does not import any
+framework — each adapter only imports its framework when its class is
+instantiated, and surfaces a clear ``ImportError`` if missing.
 
 Install adapter extras::
 
-    pip install 'loopgain[langgraph]'   # LangGraph
-    pip install 'loopgain[crewai]'      # CrewAI
-    pip install 'loopgain[autogen]'     # AutoGen v0.4+
-    pip install 'loopgain[all]'         # all of the above
+    pip install 'loopgain[langgraph]'          # LangGraph
+    pip install 'loopgain[crewai]'             # CrewAI
+    pip install 'loopgain[autogen]'            # AutoGen v0.4+
+    pip install 'loopgain[langchain]'          # LangChain (create_agent or AgentExecutor)
+    pip install 'loopgain[openai-agents]'      # OpenAI Agents SDK
+    pip install 'loopgain[claude-agent-sdk]'   # Anthropic Claude Agent SDK
+    pip install 'loopgain[all]'                # all of the above
 
 Common pattern::
 
     from loopgain import LoopGain
-    from loopgain.integrations import LangGraphAdapter   # or CrewAIAdapter, AutoGenAdapter
+    from loopgain.integrations import LangGraphAdapter   # or any other adapter
 
     lg = LoopGain(target_error=0.1, max_iterations=20)
     adapter = LangGraphAdapter(
@@ -40,13 +44,16 @@ Common pattern::
 
 from __future__ import annotations
 
-# Adapters are imported lazily so importing this package does NOT pull in
-# langgraph / crewai / autogen. Each name resolves on first attribute access
-# and surfaces a clear ImportError if its host framework isn't installed.
+# Adapters are imported lazily so importing this package does NOT pull
+# in any framework. Each name resolves on first attribute access and
+# surfaces a clear ImportError if its host framework isn't installed.
 __all__ = [
     "LangGraphAdapter",
     "CrewAIAdapter",
     "AutoGenAdapter",
+    "LangChainAdapter",
+    "OpenAIAgentsAdapter",
+    "ClaudeAgentSDKAdapter",
 ]
 
 
@@ -63,4 +70,16 @@ def __getattr__(name: str):
         from loopgain.integrations.autogen import AutoGenAdapter
 
         return AutoGenAdapter
+    if name == "LangChainAdapter":
+        from loopgain.integrations.langchain import LangChainAdapter
+
+        return LangChainAdapter
+    if name == "OpenAIAgentsAdapter":
+        from loopgain.integrations.openai_agents import OpenAIAgentsAdapter
+
+        return OpenAIAgentsAdapter
+    if name == "ClaudeAgentSDKAdapter":
+        from loopgain.integrations.claude_agent_sdk import ClaudeAgentSDKAdapter
+
+        return ClaudeAgentSDKAdapter
     raise AttributeError(f"module 'loopgain.integrations' has no attribute {name!r}")
