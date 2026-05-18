@@ -21,9 +21,18 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from loopgain.classifier import (
+    TrajectoryThresholds,
+    classify_trajectory,
+    extract_features,
+)
+
 
 # Canonical threshold bands (Aβ_smooth axis).
-# These partition the smoothed loop-gain axis into five named states.
+# Used by the legacy single-feature classifier (see ThresholdBands.state_for).
+# The v0.2 default classifier is the multi-feature trajectory classifier in
+# ``loopgain.classifier``; these bands remain for callers that explicitly opt
+# into the legacy behavior via ``classifier='legacy_bands'``.
 DEFAULT_FAST_CONVERGE = 0.3
 DEFAULT_CONVERGING = 0.85
 DEFAULT_STALLING = 0.95
@@ -157,9 +166,22 @@ class LoopGain:
             detection and ``max_iterations``.
         max_iterations: Hard safety cap. Default ``None`` (rely on
             stability detection). Recommended ~20-50 for production.
-        thresholds: Custom ``ThresholdBands``. Default is the canonical
-            0.3 / 0.85 / 0.95 / 1.05.
-        smoothing_window: EMA window for ``Aβ_smooth``. Default 3.
+        thresholds: Custom ``ThresholdBands`` (legacy single-feature
+            classifier only). Default is the canonical 0.3 / 0.85 / 0.95 /
+            1.05. Ignored when ``classifier='trajectory'``.
+        trajectory_thresholds: Custom ``TrajectoryThresholds`` for the v0.2
+            multi-feature classifier. Default is the pre-registered set
+            in ``PROTOCOL_v2_classifier.md``. Ignored when
+            ``classifier='legacy_bands'``.
+        classifier: ``'trajectory'`` (default) uses the v0.2 multi-feature
+            trajectory classifier. ``'legacy_bands'`` uses the v0.1
+            single-feature Aβ-band classifier (kept for callers that
+            empirically tuned ``ThresholdBands`` against a specific
+            workload).
+        smoothing_window: EMA window for ``Aβ_smooth``. Default 3. The Aβ
+            series is computed and stored regardless of which classifier is
+            in use — telemetry payloads always include the convergence
+            profile.
         assumed_fixed_cap: Used to compute ``savings_vs_fixed_cap``.
             Default 10 (a generous default agent iteration cap).
     """
@@ -169,6 +191,8 @@ class LoopGain:
         target_error: Optional[float] = 0.0,
         max_iterations: Optional[int] = None,
         thresholds: Optional[ThresholdBands] = None,
+        trajectory_thresholds: Optional[TrajectoryThresholds] = None,
+        classifier: str = "trajectory",
         smoothing_window: int = 3,
         assumed_fixed_cap: int = 10,
     ) -> None:
@@ -178,12 +202,19 @@ class LoopGain:
             raise ValueError("target_error must be non-negative or None")
         if max_iterations is not None and max_iterations < 1:
             raise ValueError("max_iterations must be >= 1 or None")
+        if classifier not in ("trajectory", "legacy_bands"):
+            raise ValueError(
+                "classifier must be 'trajectory' or 'legacy_bands'; got "
+                + repr(classifier)
+            )
 
         self.target_error: Optional[float] = (
             float(target_error) if target_error is not None else None
         )
         self.max_iterations = max_iterations
         self.thresholds = thresholds or ThresholdBands()
+        self.trajectory_thresholds = trajectory_thresholds or TrajectoryThresholds()
+        self.classifier_kind = classifier
         self.smoothing_window = smoothing_window
         self.assumed_fixed_cap = assumed_fixed_cap
 
@@ -192,6 +223,7 @@ class LoopGain:
         self._smoothed_history: list[float] = []
         self._outputs: list[Any] = []
         self._state: str = INIT
+        self._state_history: list[str] = []
         self._terminal: bool = False
         self._first_eta_prediction: Optional[int] = None
         self._first_eta_at_iteration: Optional[int] = None
@@ -231,7 +263,10 @@ class LoopGain:
             self._terminal = True
             return self._state
 
-        # Compute Aβ if we have a prior observation.
+        # Compute Aβ if we have a prior observation. The smoothed Aβ series
+        # is always maintained — telemetry payloads include it regardless of
+        # which classifier is selected, and the dashboard relies on it for
+        # per-iteration coloring on the trajectory chart.
         if len(self._error_history) >= 2:
             prev = self._error_history[-2]
             if prev > 0:
@@ -245,9 +280,36 @@ class LoopGain:
             self._gain_history.append(ab)
             self._smoothed_history.append(self._compute_smoothed(ab))
 
-            self._state = self.thresholds.state_for(self._smoothed_history[-1])
+            if self.classifier_kind == "legacy_bands":
+                # v0.1: single-feature Aβ_smooth band classification.
+                self._state = self.thresholds.state_for(
+                    self._smoothed_history[-1]
+                )
+            else:
+                # v0.2: trajectory classifier. See PROTOCOL_v2_classifier.md.
+                self._state = classify_trajectory(
+                    self._error_history,
+                    target_error=None,  # target_error short-circuit handled above
+                    thresholds=self.trajectory_thresholds,
+                )
+
             if self._state in (OSCILLATING, DIVERGING):
                 self._terminal = True
+
+            # v0.2 trajectory classifier: STALLING terminates after the v2
+            # protocol's "2+ consecutive stall readings" rule (matches
+            # `component-algebra-v2-protocol-final-4.md` §3.3, which says
+            # "Stalling → Return best-so-far"). Legacy bands keep their
+            # original non-terminal-STALLING contract.
+            if (
+                self.classifier_kind == "trajectory"
+                and self._state == STALLING
+                and len(self._state_history) >= 1
+                and self._state_history[-1] == STALLING
+            ):
+                self._terminal = True
+
+            self._state_history.append(self._state)
         else:
             # First observation: no Aβ yet. Conservative default state.
             self._state = FAST_CONVERGE
@@ -347,6 +409,14 @@ class LoopGain:
             outcome = "diverged"
         elif self._state == MAX_ITERATIONS:
             outcome = "max_iterations"
+        elif self._state == STALLING and self._terminal:
+            # v0.2 trajectory classifier marks STALLING terminal after 2+
+            # consecutive stall readings (v2 protocol §3.3, "Return
+            # best-so-far"). Surfaced as the "stalled" outcome — distinct
+            # from "oscillating" so callers can route on "stuck but not
+            # flapping" vs. "actively unstable." Dashboard's bandFromEvent
+            # maps "stalled" → STALLING band.
+            outcome = "stalled"
         else:
             outcome = "in_progress"
 

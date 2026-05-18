@@ -8,7 +8,46 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [0.2.0] — 2026-05-18
 
+### Changed
+- **New default classifier: multi-feature trajectory classifier.** The
+  v0.1 single-Aβ-band classifier (thresholds 0.3 / 0.85 / 0.95 / 1.05)
+  has been replaced as the default by a trajectory classifier that reads
+  four features off the full error history: cumulative `E_ratio`,
+  log-domain OLS `slope_log`, slope-significance `slope_p` (Student-t
+  two-sided), and detrended residual std `osc_std`. The five state
+  names (`FAST_CONVERGE`, `CONVERGING`, `STALLING`, `OSCILLATING`,
+  `DIVERGING`) are unchanged. Pre-registered in
+  `PROTOCOL_v2_classifier.md`; validated at 98.8% macro-averaged
+  accuracy on N=1000 deterministic-mock trajectories
+  (`RESULTS_v2_classifier.md`). Motivation: the v0.1 classifier scored
+  37.3% accuracy on the Component Algebra Lab v1 Experiment 3
+  (2026-04-10, 150 real-LLM GVR loops) because a single instantaneous
+  Aβ value cannot disambiguate floor-noise convergence, slow
+  monotone improvement, and mild drift-style divergence.
+- **`STALLING` is now terminal after 2 consecutive readings** (v2
+  protocol §3.3, "Return best-so-far"). Surfaced as a new
+  `outcome="stalled"` distinct from `oscillating`. The dashboard's
+  `bandFromEvent` routes it to the `STALLING` band.
+- **Legacy classifier preserved** via `LoopGain(classifier='legacy_bands')`
+  for callers that have empirically tuned `ThresholdBands` against a
+  specific workload.
+
 ### Added
+- `loopgain.classifier` module exposing `TrajectoryThresholds`,
+  `TrajectoryFeatures`, `extract_features`, and `classify_trajectory` for
+  post-hoc classification of stored error histories.
+- New `trajectory_thresholds` and `classifier` keyword arguments on
+  `LoopGain.__init__`.
+- `tests/test_classifier_synthetic.py` (27 tests, math-correctness gate).
+- `tests/test_classifier_mock_validation.py` (12 tests, deterministic-mock
+  validation at N=200 per regime).
+- `PROTOCOL_v2_classifier.md` — pre-registered design + threshold
+  derivations + validation plan.
+- `RESULTS_v2_classifier.md` — full validation report (synthetic, Tier-2
+  re-classification of the 150 v1 trials, Tier-3 30-trial real-LLM
+  confirmatory, Tier-A 1000-trial deterministic-mock).
+
+### Added (framework adapters, unchanged from earlier in 0.2.0 cycle)
 - **Three new framework adapters.** LoopGain now ships pre-built
   integrations for six major agent frameworks (up from three):
   - **LangChain** (`pip install 'loopgain[langchain]'`) — duck-types

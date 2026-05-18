@@ -10,6 +10,12 @@ Public API:
 """
 
 from loopgain._version import __version__
+from loopgain.classifier import (
+    TrajectoryFeatures,
+    TrajectoryThresholds,
+    classify_trajectory,
+    extract_features,
+)
 from loopgain.core import (
     LoopGain,
     LoopGainResult,
@@ -29,6 +35,10 @@ __all__ = [
     "LoopGain",
     "LoopGainResult",
     "ThresholdBands",
+    "TrajectoryThresholds",
+    "TrajectoryFeatures",
+    "classify_trajectory",
+    "extract_features",
     "INIT",
     "FAST_CONVERGE",
     "CONVERGING",

@@ -79,8 +79,16 @@ def test_canonical_converging_reaches_target():
 
 
 def test_canonical_oscillating_terminates_with_best_so_far():
-    """Aβ ≈ 1.0: loop never converges — should return best-so-far."""
-    lg = LoopGain(max_iterations=20)
+    """Aβ ≈ 1.0: loop never converges — should return best-so-far.
+
+    Constant errors (Aβ=1.0 exactly) land in the legacy OSCILLATING band
+    [0.95, 1.05]. The trajectory classifier categorizes the same trajectory
+    as STALLING (no oscillation, no trend) and terminates via the
+    consecutive-stall rule, producing outcome="stalled". Both are correct
+    operational answers (loop is stuck and should stop); this test pins the
+    legacy semantics.
+    """
+    lg = LoopGain(max_iterations=20, classifier="legacy_bands")
     # Constant errors (Aβ = 1.0 exactly)
     for i in range(20):
         if not lg.should_continue():
@@ -325,9 +333,11 @@ def test_max_iterations_triggers_terminal_state():
         if not lg.should_continue():
             break
         lg.observe(10.0)
-    # Constant errors will trigger OSCILLATING before MAX_ITERATIONS if window is large enough.
-    # With max=3 and constant errors, we get OSCILLATING on iter 3 (Aβ=1.0 → OSCILLATING band).
-    assert lg.state in (OSCILLATING, MAX_ITERATIONS)
+    # Constant errors trigger termination via stability detection. Under the
+    # legacy classifier the state is OSCILLATING (Aβ=1.0 ∈ [0.95, 1.05]);
+    # under the trajectory classifier it's STALLING (zero slope, zero
+    # variance, no trend). Both are terminal.
+    assert lg.state in (OSCILLATING, MAX_ITERATIONS, STALLING)
     assert not lg.should_continue()
 
 

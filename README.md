@@ -2,12 +2,12 @@
 
 **Barkhausen stability monitor for AI agent loops.**
 
-Replace `max_iterations=5` with a real-time loop-gain (`Aβ`) monitor that knows whether your agent loop is converging, stalling, oscillating, or diverging — and what to do in each case.
+Replace `max_iterations=5` with a real-time trajectory classifier that reads four features off the loop's error series and routes it into one of five named states — knowing whether your agent loop is converging, stalling, oscillating, or diverging, and what to do in each case.
 
 [![PyPI](https://img.shields.io/pypi/v/loopgain.svg)](https://pypi.org/project/loopgain/)
 [![Python](https://img.shields.io/pypi/pyversions/loopgain.svg)](https://pypi.org/project/loopgain/)
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-119_passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-157_passing-brightgreen.svg)](tests/)
 
 **Home:** [loopgain.ai](https://loopgain.ai)
 
@@ -48,7 +48,7 @@ while lg.should_continue():
     output = reviser.revise(output, errors)
 
 result = lg.result
-print(result.outcome)              # "converged" | "oscillating" | "diverged" | "max_iterations"
+print(result.outcome)              # "converged" | "oscillating" | "diverged" | "stalled" | "max_iterations"
 print(result.best_output)          # the lowest-error iteration's output
 print(result.iterations_used)
 print(result.gain_margin)          # 1 / max(Aβ_smooth)
@@ -61,28 +61,32 @@ print(result.savings_vs_fixed_cap)
 
 ## How it works
 
-LoopGain measures empirical loop gain at every iteration, then smooths it with an EMA:
+LoopGain measures empirical loop gain (`Aβ = E(n) / E(n-1)`) at every iteration and exposes it as a smoothed time series for visualization. The decision engine, however, classifies the **full error trajectory** using four features:
 
 ```
-Aβ(n)     = E(n) / E(n-1)
-Aβ_smooth = EMA(Aβ, w=3)
+E_ratio   = E_current / E_first      # cumulative reduction
+slope_log = OLS slope of log10(E)    # geometric trend direction
+slope_p   = t-test p-value of slope  # statistical significance
+osc_std   = std of detrended log10(E) # oscillation magnitude
 ```
 
-It classifies `Aβ_smooth` into five named bands:
+It routes the trajectory into one of five named states:
 
-| `Aβ_smooth` range | State | Action |
+| State | Condition | Action |
 | --- | --- | --- |
-| `< 0.3` | `FAST_CONVERGE` | Continue, predict ETA |
-| `0.3 ≤ Aβ < 0.85` | `CONVERGING` | Continue, watch for upward drift |
-| `0.85 ≤ Aβ < 0.95` | `STALLING` | Warn — diminishing returns |
-| `0.95 ≤ Aβ ≤ 1.05` | `OSCILLATING` | Break — return best-so-far |
-| `> 1.05` | `DIVERGING` | Abort — roll back to best-so-far |
+| `FAST_CONVERGE` | cumulative reduction to ≤ 10% of E_first | Continue, predict ETA |
+| `CONVERGING` | negative slope with `p < 0.05`, OR cumulative ≤ 50% | Continue, watch for upward drift |
+| `STALLING` | no significant slope, no detectable oscillation | Stop after 2 consecutive readings — return best-so-far |
+| `OSCILLATING` | high residual variance with flat trend | Stop — return best-so-far |
+| `DIVERGING` | positive slope with `p < 0.05` AND cumulative > 110% | Abort — roll back to best-so-far |
 
 Plus a short-circuit: if observed error drops at or below `target_error`, the loop stops immediately with state `TARGET_MET`. The default `target_error=0.0` short-circuits on exactly zero error — the natural completion signal for verifier-driven loops. Pass `target_error=None` to disable the short-circuit and rely on stability detection alone.
 
-The `±0.05` noise band around `Aβ=1` absorbs stochastic jitter from agent outputs without triggering false-positive aborts. The `0.85` `STALLING` boundary is an early warning — by the time `Aβ` crosses `1.0`, you've already wasted iterations.
+The decision is **conservative by design**: requiring both statistical significance and meaningful cumulative motion before terminating prevents false-positive aborts on noisy real-LLM error series. Validated at 98.8% macro-averaged accuracy across 5 regimes on N=1000 deterministic-mock trajectories (see `RESULTS_v2_classifier.md`). The STALLING ceiling of ~94% is the t-test's irreducible 5% type-I error rate, not a classifier weakness.
 
-These threshold defaults are derived from the Barkhausen-stability analysis and serve as reasonable starting points. Tune them per domain (via the `ThresholdBands` argument) once you have production traces.
+**Recommended minimum: 6 iterations** for reliable trend significance. At n≤4 the t-test is severely underpowered (df=2 requires |t|>4.3 for p<0.05) — the classifier conservatively falls back to STALLING when evidence is thin. The thresholds are derived analytically (control theory + statistical convention), not fitted; tune them per domain via the `TrajectoryThresholds` argument once you have production traces.
+
+**Legacy single-feature classifier:** the original v0.1 single-Aβ-band classifier (thresholds 0.3 / 0.85 / 0.95 / 1.05) is still available via `LoopGain(classifier='legacy_bands')` for callers that have empirically tuned the bands to a specific workload.
 
 ---
 
@@ -114,14 +118,16 @@ This transforms divergence detection from "abort with garbage" into "abort with 
 
 ## API reference
 
-### `LoopGain(target_error=0.0, max_iterations=None, thresholds=None, smoothing_window=3, assumed_fixed_cap=10)`
+### `LoopGain(target_error=0.0, max_iterations=None, thresholds=None, trajectory_thresholds=None, classifier='trajectory', smoothing_window=3, assumed_fixed_cap=10)`
 
 Construct the monitor.
 
 - `target_error` — Stop when an observed error drops at or below this. Default `0.0` short-circuits on exactly zero error (the natural completion signal for verifier-driven loops). Pass `None` to disable the short-circuit entirely.
 - `max_iterations` — Hard safety cap. Default `None` (rely on stability detection). Recommended ~20–50 for production.
-- `thresholds` — Custom `ThresholdBands` if defaults don't fit your domain.
-- `smoothing_window` — EMA window for the smoothed Aβ. Default 3.
+- `thresholds` — Custom `ThresholdBands` for the legacy single-Aβ-band classifier. Ignored when `classifier='trajectory'`.
+- `trajectory_thresholds` — Custom `TrajectoryThresholds` for the multi-feature classifier (the default). Override only with workload-specific evidence.
+- `classifier` — `'trajectory'` (default, v0.2 multi-feature classifier) or `'legacy_bands'` (v0.1 single-Aβ-band classifier).
+- `smoothing_window` — EMA window for the smoothed Aβ series (always maintained for visualization, regardless of classifier choice). Default 3.
 - `assumed_fixed_cap` — Used to compute `savings_vs_fixed_cap`. Default 10.
 
 ### `lg.observe(errors, output=None) -> str`
@@ -134,7 +140,7 @@ Returns `False` once a terminal state fires.
 
 ### `lg.state -> str`
 
-Current state name. One of `INIT`, `FAST_CONVERGE`, `CONVERGING`, `STALLING`, `OSCILLATING`, `DIVERGING`, `TARGET_MET`, `MAX_ITERATIONS`.
+Current state name. One of `INIT`, `FAST_CONVERGE`, `CONVERGING`, `STALLING`, `OSCILLATING`, `DIVERGING`, `TARGET_MET`, `MAX_ITERATIONS`. The corresponding terminal `result.outcome` values are `converged`, `oscillating`, `diverged`, `stalled` (v0.2 trajectory mode only — STALLING terminating after 2 consecutive readings), `max_iterations`, or `in_progress`.
 
 ### `lg.eta -> int | None`
 

@@ -31,11 +31,15 @@ from loopgain import (
 
 
 def test_smoothing_absorbs_small_aβ_jitter():
-    """Aβ that jitters in CONVERGING band (around 0.6) should stay classified
-    as CONVERGING — the EMA absorbs noise without false-positive transitions."""
+    """Aβ that jitters in CONVERGING band (around 0.6) should stay in the
+    converging family — the EMA absorbs noise without false-positive
+    transitions to STALLING/OSCILLATING/DIVERGING.
+
+    Legacy classifier: this is exactly CONVERGING. Trajectory classifier:
+    the cumulative reduction crosses one decade (0.6^8 ≈ 0.017), so the
+    more specific FAST_CONVERGE fires. Both are correct and non-terminal.
+    """
     lg = LoopGain(max_iterations=20)
-    # Pattern: error decays at 0.6 but with ±0.02 multiplicative noise.
-    # All Aβ values land in [0.58, 0.62] — clearly CONVERGING.
     errors = [100.0]
     jitter = [0.58, 0.62, 0.60, 0.59, 0.61, 0.60, 0.58, 0.62]
     for j in jitter:
@@ -44,15 +48,19 @@ def test_smoothing_absorbs_small_aβ_jitter():
         if not lg.should_continue():
             break
         lg.observe(e)
-    # Should not have falsely classified into STALLING/OSCILLATING.
-    assert lg.state == CONVERGING
+    assert lg.state in (CONVERGING, FAST_CONVERGE)
     assert lg.should_continue()
 
 
 def test_smoothing_handles_oscillating_band_jitter():
-    """Aβ jittering in the OSCILLATING band (0.95-1.05) should reliably
-    terminate — no escape via lucky noise sample."""
-    lg = LoopGain(max_iterations=20)
+    """Legacy: Aβ jittering in the OSCILLATING band (0.95-1.05) should
+    reliably terminate — no escape via lucky noise sample.
+
+    The trajectory classifier categorizes this as STALLING with a tiny
+    ±0.0088 log10 residual std (far below OSC_STD_THRESHOLD=0.30), then
+    terminates via the consecutive-stall rule. Both classifiers terminate.
+    """
+    lg = LoopGain(max_iterations=20, classifier="legacy_bands")
     # Aβ alternates 0.98 / 1.02 — both in OSCILLATING band
     errors = [100.0]
     for _ in range(10):
@@ -175,9 +183,15 @@ def test_long_converging_run_does_not_leak_state():
 
 
 def test_long_oscillating_run_terminates_promptly():
-    """Even with max_iterations=10000, a clearly oscillating loop should
-    terminate within a handful of iterations on stability detection."""
-    lg = LoopGain(max_iterations=10000)
+    """Legacy: even with max_iterations=10000, a clearly oscillating loop
+    should terminate within a handful of iterations on stability detection.
+
+    Under the legacy classifier, constant errors → Aβ=1.0 → OSCILLATING
+    band → terminal. Under the trajectory classifier the same trajectory
+    is STALLING (zero slope, zero variance) and terminates via the
+    consecutive-stall rule; see ``test_trajectory_consecutive_stall_terminates``.
+    """
+    lg = LoopGain(max_iterations=10000, classifier="legacy_bands")
     n = 0
     while lg.should_continue() and n < 10000:
         lg.observe(50.0)  # constant errors → Aβ = 1.0
