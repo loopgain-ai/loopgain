@@ -72,6 +72,10 @@ class AutoGenAdapter:
         self.error_fn = error_fn
         self.observe_sources = observe_sources
 
+        from loopgain import funnel
+
+        funnel.note_adapter(self.framework_name)
+
     async def run(
         self,
         team: Any,

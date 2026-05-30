@@ -21,6 +21,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from loopgain import funnel
 from loopgain.classifier import (
     TrajectoryThresholds,
     classify_trajectory,
@@ -228,6 +229,11 @@ class LoopGain:
         self._first_eta_prediction: Optional[int] = None
         self._first_eta_at_iteration: Optional[int] = None
 
+        # Opt-in anonymous funnel telemetry (see loopgain.funnel). No-op
+        # unless the user has explicitly opted in; fully fail-silent and
+        # distinct from the product receiver in loopgain.telemetry.
+        funnel.on_init()
+
     # ----- Public observation API -----
 
     def observe(self, errors: Any, output: Any = None) -> str:
@@ -255,12 +261,18 @@ class LoopGain:
         self._error_history.append(magnitude)
         self._outputs.append(output)
 
+        # Funnel telemetry: the first observe() ever made is the activation
+        # signal. No-op unless opted in; deduped to once-per-install.
+        if len(self._error_history) == 1:
+            funnel.on_first_observe()
+
         # TARGET_MET short-circuit takes precedence over band classification.
         # target_error=None disables the short-circuit entirely; any non-None
         # value (including 0.0) fires TARGET_MET when magnitude <= target.
         if self.target_error is not None and magnitude <= self.target_error:
             self._state = TARGET_MET
             self._terminal = True
+            funnel.note_outcome(self._state)
             return self._state
 
         # Compute Aβ if we have a prior observation. The smoothed Aβ series
@@ -333,6 +345,12 @@ class LoopGain:
             if eta_now is not None and eta_now > 0:
                 self._first_eta_prediction = eta_now
                 self._first_eta_at_iteration = len(self._error_history)
+
+        # Funnel telemetry: if this observation drove the loop terminal
+        # (oscillating / diverging / stalled / max-iterations), count the
+        # coarse outcome. The TARGET_MET case is handled at its early return.
+        if self._terminal:
+            funnel.note_outcome(self._state)
 
         return self._state
 

@@ -80,6 +80,10 @@ class LangGraphAdapter:
         self.error_fn = error_fn
         self.stream_mode = stream_mode
 
+        from loopgain import funnel
+
+        funnel.note_adapter(self.framework_name)
+
     def run(
         self,
         graph: Any,

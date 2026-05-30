@@ -90,6 +90,10 @@ class CrewAIAdapter:
         self.task_error_fn = task_error_fn
         self._installed: list[tuple[Any, str, Any]] = []
 
+        from loopgain import funnel
+
+        funnel.note_adapter(self.framework_name)
+
     def install(self, crew: Any) -> None:
         """Install callbacks on the given Crew (or any object exposing
         ``step_callback`` / ``task_callback`` attributes).

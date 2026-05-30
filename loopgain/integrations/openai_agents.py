@@ -97,6 +97,10 @@ class OpenAIAgentsAdapter:
     ) -> None:
         self.lg = lg
         self.error_fn = error_fn
+
+        from loopgain import funnel
+
+        funnel.note_adapter(self.framework_name)
         # ``None`` means "observe every event". ``frozenset()`` ≠ ``None``.
         if observe_event_types is None:
             self.observe_event_types: Optional[frozenset[str]] = None

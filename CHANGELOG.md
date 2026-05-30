@@ -6,6 +6,31 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-05-30
+
+### Added
+- **Opt-in anonymous funnel telemetry** (`loopgain.funnel`). A new,
+  *separate* telemetry path from the per-loop product receiver
+  (`loopgain.telemetry` / `LoopGain.send_telemetry`). It measures the
+  project's adoption funnel — install → first `observe()` → recurring use —
+  across the whole open-source userbase, so the maintainer can tell whether
+  anyone is using the library. **Opt-in, default-decline:** nothing leaves
+  the machine unless you explicitly opt in via `LOOPGAIN_TELEMETRY=1` or
+  `loopgain telemetry --enable`. `LOOPGAIN_TELEMETRY=0` and `DO_NOT_TRACK=1`
+  are honored as hard opt-outs; CI is auto-detected and declined silently.
+  When enabled, payloads carry only anonymous counts/metadata — a
+  locally-generated random instance id (not derived from your machine or
+  identity), hour-bucketed timestamps, library/Python/OS versions, the
+  framework adapter in use, and a coarse loop-outcome distribution. **Never
+  sent:** prompts, outputs, error contents, keys, paths, or IPs. Delivery is
+  batched, async (daemon thread + `atexit`), https-only, and fully
+  fail-silent — a funnel error can never raise into your loop. Privacy
+  contract is enforced by `tests/test_funnel.py`. See `TELEMETRY.md`.
+- **`loopgain` command-line interface.** New console entry point.
+  `loopgain telemetry --show | --enable | --disable | --reset` inspects and
+  controls funnel telemetry; `loopgain version` prints the library version.
+  Also runnable as `python -m loopgain`.
+
 ## [0.2.0] — 2026-05-18
 
 ### Changed

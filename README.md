@@ -190,6 +190,32 @@ What is sent: state transitions, Aβ summary (min/max/median), gain margin, roll
 
 The hosted endpoint at `telemetry.loopgain.ai` is one acceptable destination. The [receiver](https://github.com/loopgain-ai/telemetry-receiver) and [dashboard](https://github.com/loopgain-ai/dashboard) are both open-source — self-host to keep telemetry fully under your control.
 
+> **This is not the same as anonymous usage telemetry.** `send_telemetry` sends *your* loop data to *your* dashboard, and only when you call it. There's a separate, opt-in **funnel** telemetry described below. The two never share data or code.
+
+---
+
+## Anonymous funnel telemetry (opt-in, off by default)
+
+LoopGain can report **anonymous usage counts** so a solo maintainer can tell whether the library is actually being used — install → first `observe()` → recurring use. **It is opt-in and default-decline: nothing is sent unless you explicitly turn it on.**
+
+```bash
+loopgain telemetry --show       # status + exactly what would be sent
+loopgain telemetry --enable     # opt in   (or: export LOOPGAIN_TELEMETRY=1)
+loopgain telemetry --disable    # opt out  (or: export LOOPGAIN_TELEMETRY=0)
+```
+
+`DO_NOT_TRACK=1` is honored as a hard opt-out, and CI environments are auto-detected and declined silently. When enabled, payloads carry only a locally-generated random id (not derived from your machine), hour-bucketed timestamps, library/Python/OS versions, the adapter in use, and a coarse outcome count. **Prompts, outputs, error contents, keys, paths, and IPs are never collected.** Delivery is batched, async, https-only, and fail-silent — it can never break your loop. Full details and the privacy contract: **[TELEMETRY.md](TELEMETRY.md)**.
+
+---
+
+## Command-line interface
+
+```bash
+loopgain --version              # or: loopgain version
+loopgain telemetry --show       # inspect / control anonymous funnel telemetry
+python -m loopgain telemetry --show   # equivalent, without the console script
+```
+
 ---
 
 ## Framework adapters
