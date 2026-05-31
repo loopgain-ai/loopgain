@@ -116,6 +116,15 @@ This transforms divergence detection from "abort with garbage" into "abort with 
 
 ---
 
+## What LoopGain does and doesn't guarantee
+
+LoopGain saves money by stopping a loop once it stops improving — fewer iterations, fewer tokens. In our [public benchmark](https://github.com/loopgain-ai/loopgain-bench), that was a **93.5% median cut in API spend** vs `max_iterations=20`, with output quality preserved. Two honest limits:
+
+- **Savings depend on your workload.** Loops that usually succeed fast save the most (~96%); adversarial, failure-prone loops save less (~84%). The headline is a blend — run the benchmark on your own loops before quoting a number.
+- **LoopGain detects convergence, not correctness.** It stops when your error signal stops improving, which means the loop *settled* — not that it settled on the *right* answer. On the benchmark this preserved quality (it rarely stopped early on a worse output; false-stop rate ≤3.5%), but a loop can converge to a confident-but-wrong result. Keep your own correctness check in the loop, and remember LoopGain is only as good as the error signal you give it. A false stop that forces a rerun erodes the savings — which is exactly why the error signal matters.
+
+---
+
 ## API reference
 
 ### `LoopGain(target_error=0.0, max_iterations=None, thresholds=None, trajectory_thresholds=None, classifier='trajectory', smoothing_window=3, assumed_fixed_cap=10)`
