@@ -59,6 +59,28 @@ print(result.savings_vs_fixed_cap)
 
 ---
 
+## Defining your error signal
+
+The one thing you provide is the **error signal**: a single non-negative number, every iteration, that says how wrong the current output is. **Lower is better; zero means done.** LoopGain doesn't know what your loop does — it just watches that number's trajectory and decides whether to keep going, stop, or roll back.
+
+Your loop already has some way of knowing the output isn't good yet (or it wouldn't keep revising). Turn that into a number:
+
+| Loop | Error signal = |
+| --- | --- |
+| Agentic coding (write code → run tests) | number of **failing tests** (10 → 3 → 0) |
+| JSON / structured extraction | number of **schema violations** |
+| RAG with self-correction | number of **required facts still missing** |
+| Self-refinement with an LLM judge | judge's **gap to target** (e.g. `10 − quality_score`) |
+| Lint / format loop | **lint error count** |
+
+The only rules: non-negative, and **smaller as the output gets better**. Returning the raw list of problems works directly — `observe()` uses its length as the magnitude (e.g. hand it the list of failing tests).
+
+If your quality is fuzzy and has no natural "zero," run with `target_error=None`: LoopGain then stops when the number **stops improving**, wherever that plateau is, instead of waiting for an exact target.
+
+Every stop/continue decision is made from this one number, so **LoopGain is only as good as the error signal you give it** — pick one that genuinely tracks output quality.
+
+---
+
 ## How it works
 
 LoopGain measures empirical loop gain (`Aβ = E(n) / E(n-1)`) at every iteration and exposes it as a smoothed time series for visualization. The decision engine, however, classifies the **full error trajectory** using four features:
@@ -121,7 +143,7 @@ This transforms divergence detection from "abort with garbage" into "abort with 
 LoopGain saves money by stopping a loop once it stops improving — fewer iterations, fewer tokens. In our [public benchmark](https://github.com/loopgain-ai/loopgain-bench), that was a **93.5% median cut in API spend** vs `max_iterations=20`, with output quality preserved. Two honest limits:
 
 - **Savings depend on your workload.** Loops that usually succeed fast save the most (~96%); adversarial, failure-prone loops save less (~84%). The headline is a blend — run the benchmark on your own loops before quoting a number.
-- **LoopGain detects convergence, not correctness.** It stops when your error signal stops improving, which means the loop *settled* — not that it settled on the *right* answer. On the benchmark this preserved quality (it rarely stopped early on a worse output; false-stop rate ≤3.5%), but a loop can converge to a confident-but-wrong result. Keep your own correctness check in the loop, and remember LoopGain is only as good as the error signal you give it. A false stop that forces a rerun erodes the savings — which is exactly why the error signal matters.
+- **LoopGain detects convergence, not correctness.** It stops when your error signal stops improving — which means more iterations won't help, *not* that the loop succeeded. On the benchmark this preserved quality (it rarely stopped early on a worse output; false-stop rate ≤3.5%), but a loop can stall with the error still above zero — a plateau at, say, 2 failing tests. So check `result.best_error` (or your own pass/fail) before you trust the output: if it plateaued short of your target, that's a quality gap LoopGain can't see, and a false stop that forces a rerun is the one way it eats into the savings. LoopGain decides *when to stop*; you decide *whether the answer is good enough*.
 
 ---
 
