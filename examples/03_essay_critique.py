@@ -11,7 +11,9 @@ target_error=None: rubric loops effectively never score 10/10/10/10, so we
 don't want a target-met short-circuit. The point is to let the plateau
 manifest and have LoopGain catch the STALLING band.
 
-Expected band:  STALLING (Aβ_smooth in [0.85, 0.95] after iter 3-4).
+Expected band:  STALLING — the rubric score plateaus and the loop stops
+                making progress. (LLM-as-judge scoring is mildly noisy, so an
+                occasional run reads CONVERGING/DIVERGING instead.)
 Loop type:      verify_revise.
 """
 

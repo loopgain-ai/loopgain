@@ -1,4 +1,4 @@
-"""Example 05 — Contradictory spec → OSCILLATING + best-so-far rollback.
+"""Example 05 — Impossible spec → STALLING + best-so-far rollback.
 
 The verifier checks three conditions:
   (a) the source must NOT contain bare keywords `async`/`await`, nor any
@@ -11,19 +11,22 @@ The verifier checks three conditions:
       an un-driven coroutine and the function never actually sleeps.
 
 (a) forbids exactly the same set that (c) requires, so the minimum
-achievable error is 1 — there's no way Claude can satisfy all three. The
-loop swings between satisfying (a) and satisfying (c); error never reaches 0.
+achievable error is 1 — there's no way Claude can satisfy all three. Every
+revision fails at least one constraint, so the error never moves off 1: the
+loop makes no progress no matter how many times it tries.
 
-This is the **headline rollback demo**. LoopGain detects the Aβ ≈ 1
-plateau, terminates cleanly, and `lg.result.best_output` is the
-lowest-error iteration in the buffer — typically an earlier attempt,
-not the terminal one.
+This is the **stuck-loop demo**. A fixed `max_iterations` cap keeps paying
+Claude to spin on an unsolvable problem; LoopGain reads the flat trajectory as
+STALLING, terminates early, and `lg.result.best_output` is the lowest-error
+attempt in the buffer.
 
-target_error=None: error 0 is unreachable by construction, so there's
-no target-met short-circuit to set; we rely entirely on stability
-detection (OSCILLATING band) and max_iterations.
+Because error 0 is unreachable, `target_error=None`: there's no target-met
+short-circuit, so LoopGain relies entirely on stability detection (the STALLING
+band, fired after two flat readings) and max_iterations. Note that a naive
+`if error == 0: break` would NEVER fire here — only trajectory detection can
+tell a loop is stuck. That's the point of the example.
 
-Expected band:  OSCILLATING with best_index < iterations_used - 1.
+Expected band:  STALLING (flat trajectory), stops a few iters in.
 Loop type:      verify_revise.
 """
 
@@ -43,7 +46,7 @@ from _common import (
     send_telemetry,
 )
 
-WORKLOAD_ID = "example-05-unsolvable-oscillates"
+WORKLOAD_ID = "example-05-unsolvable-stalls"
 FIXED_CAP = 10
 
 STARTER = '''\
@@ -92,7 +95,13 @@ def strip_fences(text: str) -> str:
 
 
 def evaluate(code: str):
-    """Return (error, reason). 0 is unreachable by construction."""
+    """Return (error, reason). 0 is unreachable by construction.
+
+    The spec is impossible, so every attempt fails at least one constraint and
+    the error sits at 1 — the loop makes no forward progress no matter how many
+    times it revises. A fixed cap keeps paying for that; LoopGain reads the flat
+    trajectory as STALLING and stops early, returning the best attempt seen.
+    """
     if not code:
         return 3, "no code returned"
     forbidden_hits = DRIVER_RE.findall(code)
@@ -146,7 +155,7 @@ def loopgain_run(client):
 def main() -> None:
     client = get_client()
     print("Spec: rewrite to use asyncio.sleep without `async`/`await`.\n"
-          "(Impossible by construction — expecting OSCILLATING + rollback.)\n")
+          "(Impossible by construction — expecting STALLING + rollback.)\n")
     baseline_err, baseline_iters = baseline_run(client)
     lg = loopgain_run(client)
     print_comparison(baseline_iters, baseline_err, lg)

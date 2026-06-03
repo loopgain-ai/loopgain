@@ -9,7 +9,7 @@ Env vars used:
     ANTHROPIC_API_KEY              - required to call Claude
     LOOPGAIN_TELEMETRY_ENDPOINT    - canonical: https://telemetry.loopgain.ai/v1/aggregate
     LOOPGAIN_TELEMETRY_TOKEN       - bearer token; if unset, telemetry is skipped
-    LOOPGAIN_EXAMPLE_MODEL         - optional override (default: claude-opus-4-7)
+    LOOPGAIN_EXAMPLE_MODEL         - optional override (default: claude-haiku-4-5)
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import os
 import sys
 from typing import Optional
 
-DEFAULT_MODEL = os.environ.get("LOOPGAIN_EXAMPLE_MODEL", "claude-opus-4-7")
+DEFAULT_MODEL = os.environ.get("LOOPGAIN_EXAMPLE_MODEL", "claude-haiku-4-5")
 DEFAULT_ENDPOINT = "https://telemetry.loopgain.ai/v1/aggregate"
 
 

@@ -12,7 +12,8 @@ This example runs the SAME loop twice so you can compare:
   BASELINE — fixed cap of iterations regardless of success.
   LOOPGAIN — target_error=0 short-circuits the moment validation passes.
 
-Expected band:  CONVERGING (or FAST_CONVERGE → TARGET_MET if Opus one-shots).
+Expected band:  TARGET_MET on iter 1 — capable models (incl. Haiku 4.5)
+                one-shot schema-valid JSON; CONVERGING only on weaker models.
 Loop type:      verify_revise.
 """
 

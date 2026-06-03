@@ -7,12 +7,19 @@ iteration cap) so you can see the savings as the headline number.
 | # | File | Pattern | Demonstrates |
 |---|---|---|---|
 | 01 | `01_code_pytest.py` | verify-revise | `TARGET_MET` on iter 1 — Codewars-grade problem with pytest as verifier |
-| 02 | `02_json_extract.py` | verify-revise | `CONVERGING` / `TARGET_MET` — JSON extraction with schema validation |
-| 03 | `03_essay_critique.py` | verify-revise (LLM-as-judge) | `STALLING` — rubric-loop plateau (the *Waste Report* case) |
-| 04 | `04_sql_synth.py` | tool-use retry | Mixed bands — text-to-SQL with execution diff |
-| 05 | `05_unsolvable_oscillates.py` | verify-revise | `OSCILLATING` + best-so-far rollback (headline demo) |
+| 02 | `02_json_extract.py` | verify-revise | `TARGET_MET` on iter 1 (capable models one-shot) — JSON extraction with schema validation |
+| 03 | `03_essay_critique.py` | verify-revise (LLM-as-judge) | `STALLING` — rubric-loop plateau (the *Waste Report* case); mildly judge-noisy |
+| 04 | `04_sql_synth.py` | tool-use retry | `TARGET_MET` on iter 1 for capable models — text-to-SQL with execution diff |
+| 05 | `05_unsolvable_stalls.py` | verify-revise | `STALLING` + best-so-far rollback — an impossible spec the loop can't solve, caught and stopped |
 | 06 | `06_diverges.py` | refinement | `DIVERGING` + best-so-far rollback (headline demo) |
 | 07 | `07_agentic_multistep.py` | multi-step reasoning | `TARGET_MET` — agentic goal pursuit across multi-dimensional constraints |
+
+**Which bands these actually reproduce (verified with Haiku 4.5).** The scripts
+reliably show `TARGET_MET` (01/02/04/07), `STALLING` (05, and usually 03), and
+`DIVERGING` (06). Sustained `OSCILLATING` and multi-iteration `CONVERGING` are
+hard to force on demand — capable models tend to one-shot or stall, and the
+monitor stops a loop *before* a sustained oscillation can establish. (Both bands
+still occur in real fleet data; they're just not reliably scriptable.)
 
 ---
 
@@ -31,7 +38,7 @@ export LOOPGAIN_TELEMETRY_TOKEN="lgk_..."   # get one at https://loopgain.ai
 Without `LOOPGAIN_TELEMETRY_TOKEN`, the loop still runs locally — only the
 POST is skipped.
 
-Override the model via `LOOPGAIN_EXAMPLE_MODEL` (default `claude-opus-4-7`).
+Override the model via `LOOPGAIN_EXAMPLE_MODEL` (default `claude-haiku-4-5`).
 
 ---
 
@@ -74,7 +81,7 @@ telemetry sent: True
 The Saved line is the headline pilot-demo number: **measured savings,
 not extrapolated**. Both runs make real Claude API calls.
 
-For 05 (oscillating) and 06 (diverging) you'll also see a `rolled_back`
+For 05 (stalls) and 06 (diverges) you'll also see a `rolled_back`
 line — `best_index` is an earlier iteration than the terminal one, the
 canonical "LoopGain rescued the output" punchline.
 
@@ -87,7 +94,7 @@ make examples
 ```
 
 (Manual only — there's no CI integration. Each invocation costs real API
-budget; expect ~$0.10-$0.30 per example with Opus, roughly $1-3 total.)
+budget; with the default Haiku 4.5 it's well under $0.10 per example.)
 
 ---
 
