@@ -9,7 +9,7 @@ AI agent loops waste time and money when they don't know when to stop. LoopGain 
 [![PyPI](https://img.shields.io/pypi/v/loopgain.svg)](https://pypi.org/project/loopgain/)
 [![Python](https://img.shields.io/pypi/pyversions/loopgain.svg)](https://pypi.org/project/loopgain/)
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-202_passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-200%2B_passing-brightgreen.svg)](tests/)
 
 **Home:** [loopgain.ai](https://loopgain.ai)
 

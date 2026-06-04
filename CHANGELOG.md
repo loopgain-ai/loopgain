@@ -6,6 +6,11 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Test badge now reads "200+ passing" instead of a hard count. The collected
+  test total is adapter-dependent (which framework extras are installed changes
+  collection), so a fixed number drifts; "200+" is the honest, stable claim.
+
 ## [0.4.1] — 2026-06-04
 
 Docs / packaging only — **no library code change** (0.4.0's runtime behavior is
