@@ -1,13 +1,15 @@
 # LoopGain
 
-**Barkhausen stability monitor for AI agent loops.**
+**An open-source cost controller for AI agent loops.**
 
-Replace `max_iterations=5` with a real-time trajectory classifier that reads four features off the loop's error series and routes it into one of five named states — knowing whether your agent loop is converging, stalling, oscillating, or diverging, and what to do in each case.
+AI agent loops waste time and money when they don't know when to stop. LoopGain measures the loop in real time and stops it the moment it has actually converged — and rolls back before it degrades — instead of running to a fixed `max_iterations` cap.
+
+> **Across 2,000 paired trials over 10 cells**, LoopGain reduced total API spend by **92.8%** vs `max_iter=20`, dropped median wall-clock latency from 30.9s to 2.1s (**~15×**), preserved output quality on natural-distribution workloads (W1–W4: judge winrate 0.50–0.63, CI excluding null on most cells), and improved output quality on engineered-failure workloads (W5: winrate 0.92–0.95 across three adapters). Weighted-average pairwise preference for LG vs B20 across 1,800 judge comparisons: **0.678**. Zero of six kill criteria fired.
 
 [![PyPI](https://img.shields.io/pypi/v/loopgain.svg)](https://pypi.org/project/loopgain/)
 [![Python](https://img.shields.io/pypi/pyversions/loopgain.svg)](https://pypi.org/project/loopgain/)
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-157_passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-202_passing-brightgreen.svg)](tests/)
 
 **Home:** [loopgain.ai](https://loopgain.ai)
 
@@ -19,7 +21,7 @@ Works for **any iterative AI workflow with a measurable error signal** — verif
 
 ## Why
 
-Production agent loops universally use `max_iterations=N` as their termination policy. It's the embarrassing default of agentic AI: you either waste compute (loop stops too late) or ship bad output (loop stops too early). LoopGain replaces it with a control-theoretic stability monitor based on the **Barkhausen criterion** — a foundational result from electrical-engineering feedback-oscillator analysis (1921).
+Production agent loops universally use `max_iterations=N` as their termination policy. It's the embarrassing default of agentic AI: you either waste compute (loop stops too late) or ship bad output (loop stops too early). LoopGain replaces it with a control-theoretic stop-and-rollback policy grounded in the **Barkhausen criterion** — a foundational result from electrical-engineering feedback-oscillator analysis (1921).
 
 ---
 
@@ -96,7 +98,7 @@ It routes the trajectory into one of five named states:
 
 | State | Condition | Action |
 | --- | --- | --- |
-| `FAST_CONVERGE` | cumulative reduction to ≤ 10% of E_first | Continue, predict ETA |
+| `FAST_CONVERGE` | cumulative reduction to ≤ 10% of E_first | Continue |
 | `CONVERGING` | negative slope with `p < 0.05`, OR cumulative ≤ 50% | Continue, watch for upward drift |
 | `STALLING` | no significant slope, no detectable oscillation | Stop after 2 consecutive readings — return best-so-far |
 | `OSCILLATING` | high residual variance with flat trend | Stop — return best-so-far |
@@ -109,18 +111,6 @@ The decision is **conservative by design**: requiring both statistical significa
 **Recommended minimum: 6 iterations** for reliable trend significance. At n≤4 the t-test is severely underpowered (df=2 requires |t|>4.3 for p<0.05) — the classifier conservatively falls back to STALLING when evidence is thin. The thresholds are derived analytically (control theory + statistical convention), not fitted; tune them per domain via the `TrajectoryThresholds` argument once you have production traces.
 
 **Legacy single-feature classifier:** the original v0.1 single-Aβ-band classifier (thresholds 0.3 / 0.85 / 0.95 / 1.05) is still available via `LoopGain(classifier='legacy_bands')` for callers that have empirically tuned the bands to a specific workload.
-
----
-
-## ETA prediction
-
-When the loop is converging (`Aβ_smooth < 1`), LoopGain produces a closed-form prediction of iterations remaining:
-
-```
-n_remaining = log(E_target / E_current) / log(Aβ_smooth)
-```
-
-Available as `lg.eta` mid-loop. Returns `None` when the prediction isn't well-defined (no Aβ yet, target zero, or non-converging gain).
 
 ---
 
@@ -175,7 +165,7 @@ Current state name. One of `INIT`, `FAST_CONVERGE`, `CONVERGING`, `STALLING`, `O
 
 ### `lg.eta -> int | None`
 
-Predicted iterations to reach target. `None` when not well-defined.
+Best-effort closed-form estimate of iterations remaining, exposed for instrumentation. Returns `None` whenever it isn't well-defined — which is most of the time on real, jump-dominated loops, so don't depend on it for control.
 
 ### `lg.gain_margin -> float | None`
 

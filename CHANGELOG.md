@@ -6,6 +6,24 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-06-04
+
+Docs / packaging only — **no library code change** (0.4.0's runtime behavior is
+unchanged). This release exists solely to update the immutable PyPI metadata,
+which can't be edited in place once published.
+
+### Changed
+- **Product descriptor is now "cost controller," not "stability monitor."** The
+  README headline and the PyPI package description now lead with cost control
+  ("an open-source cost controller for AI agent loops"), matching the rest of
+  the public surface. The Barkhausen stability *criterion* (the `Aβ` loop-gain
+  math) stays as the technical "how" in the body — only the product descriptor
+  changed.
+- **Dropped "ETA prediction" from the package summary.** The closed-form ETA is
+  still shipped (`lg.eta`), but it fires on too few real trajectories to earn a
+  headline mention; removed from the one-line description to avoid over-claiming.
+- Test badge corrected 157 → 202 passing.
+
 ## [0.4.0] — 2026-06-03
 
 ### Fixed
