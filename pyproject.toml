@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "loopgain"
-version = "0.3.0"
+# Single source of truth: loopgain/_version.py (read dynamically below).
+# Bump the version in that one file per release; this no longer duplicates it.
+dynamic = ["version"]
 description = "Barkhausen stability monitor for AI agent loops. Real-time loop-gain (Aβ) monitoring with five named threshold bands, best-so-far rollback, and ETA prediction."
 authors = [{name = "Dave Fitzsimmons", email = "hello@loopgain.ai"}]
 readme = "README.md"
@@ -99,6 +101,11 @@ all = [
 # via the Anthropic SDK). Not a runtime dep — `pip install loopgain` stays
 # zero-dep. Install with `pip install 'loopgain[examples]'`.
 examples = ["anthropic>=0.40.0"]
+
+[tool.setuptools.dynamic]
+# Reads the literal ``__version__ = "x.y.z"`` from loopgain/_version.py via AST
+# (no import), so pyproject.toml never duplicates the version string.
+version = {attr = "loopgain._version.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["."]

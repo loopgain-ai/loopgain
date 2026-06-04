@@ -6,6 +6,34 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-06-03
+
+### Fixed
+- **Loops could run unbounded on a plateau (liveness bug).** The trajectory
+  classifier emitted its "continue" verdicts (`FAST_CONVERGE`, `CONVERGING`)
+  from *cumulative* error reduction and a *whole-history* slope — both
+  describe the past and never expire. A loop that reduced its error and then
+  plateaued or oscillated *below* the cumulative threshold stayed pinned in a
+  continue-state, never reached `STALLING`/`OSCILLATING`, and — with the old
+  default `max_iterations=None` — never terminated (`should_continue()`
+  returned `True` forever). Output was never wrong (best-so-far rollback held
+  the good answer) but the loop never returned to hand it back. Fixed with a
+  liveness gate: the continue-verdicts are now withdrawn once a loop has gone
+  `stall_patience` iterations (default 3) without achieving a new lowest
+  error, so a stalled/oscillating loop terminates and returns best-so-far.
+  **Action for users:** none required — the fix is automatic. If you relied on
+  `max_iterations=None` + `target_error=None` and saw loops hang on a plateau,
+  upgrade.
+
+### Changed
+- **`max_iterations` now defaults to `50`** (was `None`) as a hard safety
+  backstop, so the library can never run truly unbounded even if a loop never
+  converges and never stalls. A stability verdict normally terminates the loop
+  long before 50. Pass `max_iterations=None` to restore the old fully-unbounded
+  behavior, or a smaller integer to cap tighter. **Action for users:** if you
+  intentionally ran unbounded loops longer than 50 iterations under the old
+  default, set `max_iterations=None` (or your desired cap) explicitly.
+
 ## [0.3.0] — 2026-05-30
 
 ### Added

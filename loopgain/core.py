@@ -40,6 +40,16 @@ DEFAULT_STALLING = 0.95
 DEFAULT_OSCILLATING_UPPER = 1.05
 
 
+# Bounded-by-default safety backstop. The loop should normally terminate on a
+# stability verdict (target met / oscillating / diverging / stalled) long
+# before this; it exists only so the library can never run truly unbounded if
+# a loop never converges and never stalls (e.g. infinitesimal-but-real progress
+# with target_error=None). Generous relative to typical loop lengths (the
+# bench capped at 20). Pass max_iterations=None to opt into a fully unbounded
+# loop, or a smaller integer to cap tighter.
+DEFAULT_MAX_ITERATIONS = 50
+
+
 # State names. Exported for use in switch/case in user code.
 INIT = "INIT"
 FAST_CONVERGE = "FAST_CONVERGE"
@@ -165,8 +175,11 @@ class LoopGain:
             tests, no validation errors, etc.). Pass ``None`` to disable
             the short-circuit entirely and rely only on stability
             detection and ``max_iterations``.
-        max_iterations: Hard safety cap. Default ``None`` (rely on
-            stability detection). Recommended ~20-50 for production.
+        max_iterations: Hard safety backstop. Default
+            ``DEFAULT_MAX_ITERATIONS`` (50) so the loop can never run
+            unbounded; normally a stability verdict terminates it long
+            before this. Pass ``None`` to opt into a fully unbounded loop,
+            or a smaller integer to cap tighter.
         thresholds: Custom ``ThresholdBands`` (legacy single-feature
             classifier only). Default is the canonical 0.3 / 0.85 / 0.95 /
             1.05. Ignored when ``classifier='trajectory'``.
@@ -190,7 +203,7 @@ class LoopGain:
     def __init__(
         self,
         target_error: Optional[float] = 0.0,
-        max_iterations: Optional[int] = None,
+        max_iterations: Optional[int] = DEFAULT_MAX_ITERATIONS,
         thresholds: Optional[ThresholdBands] = None,
         trajectory_thresholds: Optional[TrajectoryThresholds] = None,
         classifier: str = "trajectory",

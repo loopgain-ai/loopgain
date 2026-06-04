@@ -158,12 +158,22 @@ def test_pure_stall_no_trend():
     )
 
 
-def test_floor_convergence_already_at_target():
-    """If error is already ≈ 0 at observation 1, classifier returns
-    FAST_CONVERGE (cumulative reduction to floor)."""
+def test_floor_convergence_already_flat_at_floor_stalls():
+    """A loop already pinned at the numerical floor from iteration 0, flat,
+    classifies as STALLING — not FAST_CONVERGE.
+
+    Updated 2026-06 with the liveness-gate fix (see DEFAULT_STALL_PATIENCE).
+    Previously this returned FAST_CONVERGE on the strength of cumulative
+    reduction alone — but FAST_CONVERGE is a *continue* verdict, so an
+    at-floor flat loop would have continued (and, with no max_iterations,
+    run unbounded) instead of stopping. STALLING is the correct verdict: the
+    loop has made no progress for `stall_patience` iterations, so it
+    terminates via the consecutive-stall rule and returns best-so-far (the
+    floor value — a fine answer). In real use the `target_error`
+    short-circuit (next test) handles the at-target case directly."""
     trajectory = [1e-15] * 5
     state = classify_trajectory(trajectory)
-    assert state == FAST_CONVERGE
+    assert state == STALLING
 
 
 def test_target_met_short_circuit():

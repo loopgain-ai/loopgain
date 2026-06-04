@@ -66,6 +66,20 @@ DEFAULT_OSC_STD_THRESHOLD = 0.30
 # for the oscillation gate.
 DEFAULT_SLOPE_TOL = 0.05
 
+# Liveness gate: number of iterations a loop may go without achieving a new
+# best (lowest) error before its "continue" verdicts (FAST_CONVERGE /
+# CONVERGING) are withdrawn so it can reach STALLING / OSCILLATING and
+# terminate. Without this, a loop that drops a lot and then plateaus or
+# oscillates *below* the cumulative thresholds keeps its historical win
+# forever and never terminates. Derivation: the continue-states are claims
+# about *ongoing* progress; cumulative reduction (E_current/E_first) and a
+# whole-history slope are claims about the *past* and do not expire. We treat
+# "no new low in N steps" as the loop having stopped improving. N is small
+# (3) so a sustained plateau is caught quickly, but the consecutive-STALLING
+# termination rule (2 readings) still protects a loop that briefly stalls and
+# then resumes hitting new lows.
+DEFAULT_STALL_PATIENCE = 3
+
 # Numerical floor to avoid log(0).
 _EPS = 1e-12
 
@@ -85,6 +99,7 @@ class TrajectoryThresholds:
     div_margin: float = DEFAULT_DIV_MARGIN
     osc_std_threshold: float = DEFAULT_OSC_STD_THRESHOLD
     slope_tol: float = DEFAULT_SLOPE_TOL
+    stall_patience: int = DEFAULT_STALL_PATIENCE
 
 
 @dataclass(frozen=True)
@@ -276,6 +291,18 @@ def classify_trajectory(
 
     f = extract_features(error_history)
 
+    # Liveness signal: how many iterations since the loop last achieved a new
+    # best (lowest) error. A genuinely converging loop keeps hitting new lows,
+    # so this stays small; a loop that dropped a lot and then plateaued (or is
+    # oscillating below the cumulative thresholds) has a large value. We use it
+    # to withdraw the "continue" verdicts (FAST_CONVERGE / CONVERGING) once a
+    # loop has stopped improving, so it can reach STALLING / OSCILLATING and
+    # terminate instead of riding its historical cumulative win forever. See
+    # DEFAULT_STALL_PATIENCE.
+    hist = list(error_history)
+    iters_since_best = (n - 1) - hist.index(min(hist))
+    still_improving = iters_since_best < th.stall_patience
+
     # n == 2 special case: with two observations, the slope is well defined
     # but its p-value is not (zero residual degrees of freedom). Fall back to
     # the sign of the change. This is the same conservatism as a Wilcoxon
@@ -291,13 +318,20 @@ def classify_trajectory(
         return STALLING
 
     # Order matters: FAST_CONVERGE precedes CONVERGING; both precede the
-    # remaining gates.
-    if f.e_ratio <= th.e_ratio_fast:
+    # remaining gates. Both continue-verdicts are gated on `still_improving`:
+    # a loop that has stopped hitting new lows is no longer "converging" no
+    # matter how large its historical cumulative reduction was, and must be
+    # allowed to fall through to STALLING / OSCILLATING so it can terminate.
+    if f.e_ratio <= th.e_ratio_fast and still_improving:
         return FAST_CONVERGE
 
     slope_significant = f.slope_p < th.p_sig
 
-    if f.slope_log < 0 and (slope_significant or f.e_ratio <= th.e_ratio_conv):
+    if (
+        f.slope_log < 0
+        and still_improving
+        and (slope_significant or f.e_ratio <= th.e_ratio_conv)
+    ):
         return CONVERGING
 
     if f.slope_log > 0 and slope_significant and f.e_ratio > 1.0 + th.div_margin:
