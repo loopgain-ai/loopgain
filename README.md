@@ -140,21 +140,21 @@ This transforms divergence detection from "abort with garbage" into "abort with 
 
 ## What LoopGain does and doesn't guarantee
 
-LoopGain saves money by stopping a loop once it stops improving — fewer iterations, fewer tokens. In our [public benchmark](https://github.com/loopgain-ai/loopgain-bench), that was a **93.5% median cut in API spend** vs `max_iterations=20`, with output quality preserved. Two honest limits:
+LoopGain saves money by stopping a loop once it stops improving — fewer iterations, fewer tokens. In our [public benchmark](https://github.com/loopgain-ai/loopgain-bench), that was a **92.8% median cut in API spend** vs `max_iterations=20`, with output quality preserved. Two honest limits:
 
-- **Savings depend on your workload.** Loops that usually succeed fast save the most (~96%); adversarial, failure-prone loops save less (~84%). The headline is a blend — run the benchmark on your own loops before quoting a number.
-- **LoopGain detects convergence, not correctness.** It stops when your error signal stops improving — which means more iterations won't help, *not* that the loop succeeded. On the benchmark this preserved quality (it rarely stopped early on a worse output; false-stop rate ≤3.5%), but a loop can stall with the error still above zero — a plateau at, say, 2 failing tests. So check `result.best_error` (or your own pass/fail) before you trust the output: if it plateaued short of your target, that's a quality gap LoopGain can't see, and a false stop that forces a rerun is the one way it eats into the savings. LoopGain decides *when to stop*; you decide *whether the answer is good enough*.
+- **Savings depend on your workload.** Loops that usually succeed fast save the most (~96%); adversarial, failure-prone loops save less (~78–84%). The headline is a blend — run the benchmark on your own loops before quoting a number.
+- **LoopGain detects convergence, not correctness.** It stops when your error signal stops improving — which means more iterations won't help, *not* that the loop succeeded. On the benchmark this preserved quality (it rarely stopped early on a worse output; false-stop rate ≤4.5%), but a loop can stall with the error still above zero — a plateau at, say, 2 failing tests. So check `result.best_error` (or your own pass/fail) before you trust the output: if it plateaued short of your target, that's a quality gap LoopGain can't see, and a false stop that forces a rerun is the one way it eats into the savings. LoopGain decides *when to stop*; you decide *whether the answer is good enough*.
 
 ---
 
 ## API reference
 
-### `LoopGain(target_error=0.0, max_iterations=None, thresholds=None, trajectory_thresholds=None, classifier='trajectory', smoothing_window=3, assumed_fixed_cap=10)`
+### `LoopGain(target_error=0.0, max_iterations=50, thresholds=None, trajectory_thresholds=None, classifier='trajectory', smoothing_window=3, assumed_fixed_cap=10)`
 
 Construct the monitor.
 
 - `target_error` — Stop when an observed error drops at or below this. Default `0.0` short-circuits on exactly zero error (the natural completion signal for verifier-driven loops). Pass `None` to disable the short-circuit entirely.
-- `max_iterations` — Hard safety cap. Default `None` (rely on stability detection). Recommended ~20–50 for production.
+- `max_iterations` — Hard safety backstop. Default `50` so the loop can never run unbounded; a stability verdict normally terminates it well before this. Pass `None` to opt into a fully unbounded loop (only safe if your loop is guaranteed to reach `target_error` or a stop-state), or a smaller integer to cap tighter.
 - `thresholds` — Custom `ThresholdBands` for the legacy single-Aβ-band classifier. Ignored when `classifier='trajectory'`.
 - `trajectory_thresholds` — Custom `TrajectoryThresholds` for the multi-feature classifier (the default). Override only with workload-specific evidence.
 - `classifier` — `'trajectory'` (default, v0.2 multi-feature classifier) or `'legacy_bands'` (v0.1 single-Aβ-band classifier).
