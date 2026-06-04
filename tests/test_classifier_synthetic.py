@@ -33,7 +33,42 @@ from loopgain import (
     classify_trajectory,
     extract_features,
 )
-from loopgain.classifier import _ols_slope_and_p
+from loopgain.classifier import _ols_slope_and_p, _two_sided_t_p
+
+
+# ----- Two-sided t p-value closed forms -----
+
+
+def test_two_sided_t_p_df1_exact():
+    """df=1 is the Cauchy distribution: two-sided p = 1 - 2·atan(t)/pi."""
+    for t in (0.0, 0.5, 1.0, 2.0, 5.0, 12.706):
+        expected = 1.0 - 2.0 * math.atan(t) / math.pi
+        assert _two_sided_t_p(t, 1) == pytest.approx(expected, abs=1e-9)
+    # t=1 is the median of |T| for df=1 → two-sided p = 0.5.
+    assert _two_sided_t_p(1.0, 1) == pytest.approx(0.5, abs=1e-9)
+
+
+def test_two_sided_t_p_df2_exact():
+    """df=2 closed form: two-sided p = 1 - |t|/sqrt(2 + t^2).
+
+    Regression guard for the doubled-p bug: the critical value for p=0.05
+    at df=2 is t=4.302653. The previous implementation returned ~0.10 here
+    (2x too large), which forced |t|>6.21 for significance and made the n=4
+    classifier far too conservative.
+    """
+    for t in (0.0, 0.5, 1.0, 2.0, 5.0):
+        expected = 1.0 - t / math.sqrt(2.0 + t * t)
+        assert _two_sided_t_p(t, 2) == pytest.approx(expected, abs=1e-9)
+    # The exact 5% two-sided critical value for df=2.
+    assert _two_sided_t_p(4.302653, 2) == pytest.approx(0.05, abs=1e-4)
+    # p is a probability: monotone non-increasing in t, bounded to [0, 1].
+    assert _two_sided_t_p(0.0, 2) == pytest.approx(1.0, abs=1e-9)
+    prev = 1.1
+    for t in (0.0, 0.5, 1.0, 2.0, 4.0, 8.0, 50.0):
+        p = _two_sided_t_p(t, 2)
+        assert 0.0 <= p <= 1.0
+        assert p <= prev + 1e-12
+        prev = p
 
 
 # ----- OLS slope / p-value building blocks -----

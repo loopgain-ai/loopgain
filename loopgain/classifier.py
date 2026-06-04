@@ -184,9 +184,14 @@ def _two_sided_t_p(t_abs: float, df: int) -> float:
         # exact: cdf_t(t,1) = 0.5 + arctan(t)/pi
         return 2.0 * (0.5 - math.atan(t_abs) / math.pi)
     if df == 2:
-        # exact one-sided survival: 1 - (1 + t²/2)^(-1) doubled
-        return min(1.0, 2.0 * (1.0 - t_abs / math.sqrt(2.0 + t_abs * t_abs) / 1.0) * 0.5
-                   + 2.0 * (0.5 - 0.5 * t_abs / math.sqrt(2.0 + t_abs * t_abs)))
+        # Exact two-sided p-value for Student-t with df=2. The df=2 CDF is
+        # F(t) = 1/2 + t / (2·√(2 + t²)), so the one-sided survival is
+        # P(T > t) = 1/2 − t / (2·√(2 + t²)) and the two-sided p is
+        #   2·P(T > |t|) = 1 − |t| / √(2 + t²).
+        # (The previous implementation returned twice this — it required
+        # |t| > 6.21 for p<0.05 instead of the correct |t| > 4.30, making
+        # the n=4 classifier far too conservative. See test_classifier.)
+        return max(0.0, 1.0 - t_abs / math.sqrt(2.0 + t_abs * t_abs))
     # Wilson-Hilferty: transform t² ~ F(1, df), then F → chi-square via
     # cube-root approximation. For our purposes the simpler normal-approx
     # to the t with the Hill / Abramowitz adjustment is enough.

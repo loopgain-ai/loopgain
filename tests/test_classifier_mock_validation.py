@@ -223,11 +223,13 @@ def test_loop_length_robustness():
     - n=8 (df=6): ≥ 90% (the default real-loop length)
     - n=12 (df=10): ≥ 95%
     """
-    # n=4 is intentionally excluded: with df=2 the t-test requires |t|>4.3
-    # for p<0.05, which is a fundamental statistical-power floor. The
-    # classifier correctly falls back to STALLING (insufficient evidence)
-    # for most convergent trajectories at n=4. Documented as a
-    # min-recommended-iterations limit, not a bug.
+    # n=4 is intentionally excluded from the high-accuracy thresholds below:
+    # with df=2 the t-test correctly requires |t|>4.30 for p<0.05 (see
+    # test_two_sided_t_p_df2_exact), a fundamental statistical-power floor at
+    # this length. The classifier falls back to cumulative E_ratio when the
+    # slope test is underpowered. This is a min-recommended-iterations limit,
+    # not a bug. (Historically the df=2 p-value was computed at 2x its true
+    # value, requiring |t|>6.21 and worsening this floor — now fixed.)
     LEN_THRESHOLDS = {6: 0.80, 8: 0.90, 12: 0.95}
     for n, threshold in LEN_THRESHOLDS.items():
         for gen, expected in [
