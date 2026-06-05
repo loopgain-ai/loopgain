@@ -178,6 +178,11 @@ def build_payload(
             "savings_vs_fixed_cap": result.savings_vs_fixed_cap,
             "convergence_profile_summary": profile_summary,
             "rollback_triggered": result.outcome in ("oscillating", "diverged"),
+            # Index (0-based) of the lowest-error iteration. Lets the receiver
+            # derive iterations-to-best (best_index+1) and iterations-past-best
+            # (iterations_used-1-best_index) — the "Iteration Waste" view.
+            # Privacy-safe: an integer position, no output/error content.
+            "best_index": result.best_index,
             # v2: first computable eta snapshot, for ETA calibration dashboard.
             # Predicted total iterations = first_eta_at_iteration +
             # first_eta_prediction; compare to iterations_used to compute the
