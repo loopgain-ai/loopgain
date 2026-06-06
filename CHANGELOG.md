@@ -6,6 +6,31 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-06-05
+
+Correctness + telemetry. A statistics fix to the trajectory classifier (no
+effect on any published benchmark number — see below) plus one additive
+telemetry field. Backward-compatible; no public API change.
+
+### Fixed
+- **Corrected the df=2 (n=4) two-sided t-test p-value.** The `df=2` branch of
+  `_two_sided_t_p` returned a p-value exactly 2× too large, requiring
+  `|t| > 6.21` for significance instead of the correct `|t| > 4.30`. This made
+  the classifier too conservative on 4-iteration trajectories, mislabeling
+  ~11% of *marginal* n=4 converging loops as `STALLING` instead of
+  `CONVERGING`. Now uses the exact closed form `1 − |t|/√(2 + t²)`; pinned by
+  exact-value regression tests (`test_two_sided_t_p_df1/df2_exact`). The df=1
+  and df≥3 branches were already correct. **Bench impact: none** — of 2,000
+  benchmark trials only 21 reach iteration 4 and zero fall in the affected
+  marginal band, so the published distribution and cost numbers are unchanged
+  (verified by controlled old-vs-new replay over the recorded trajectories).
+
+### Added
+- **`best_index` in the loop telemetry payload** — the 0-based index of the
+  lowest-error iteration. Lets the receiver derive iterations-to-best and
+  iterations-past-best for the Iteration-Waste view. Privacy-safe (an integer
+  position); the ingest path is otherwise unchanged.
+
 ### Changed
 - Test badge now reads "200+ passing" instead of a hard count. The collected
   test total is adapter-dependent (which framework extras are installed changes
