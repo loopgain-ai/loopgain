@@ -660,3 +660,117 @@ def test_send_payload_refuses_redirects():
         req = urllib.request.Request("https://example.com/")
         with pytest.raises(urllib.error.HTTPError):
             method(req, io.BytesIO(b""), 302, "Found", {})
+
+
+# ----- send_payload retry behavior (transient failures) -----
+
+import socket as _socket
+import urllib.error as _uerr
+
+from loopgain import telemetry as _tele
+
+
+class _OkResp:
+    status = 202
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+
+def _retry_payload():
+    return build_payload(_make_terminated_loop(), workload_id="retry-test")
+
+
+def test_send_payload_retries_transient_then_succeeds(monkeypatch):
+    """A transient failure (timeout) is retried; a later success returns True."""
+    calls = {"n": 0}
+
+    def flaky(req, timeout=None):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise _socket.timeout("slow first attempts")
+        return _OkResp()
+
+    sleeps: list[float] = []
+    monkeypatch.setattr("loopgain.telemetry._open_request", flaky)
+    monkeypatch.setattr("loopgain.telemetry.time.sleep", lambda s: sleeps.append(s))
+
+    ok = send_payload("https://t.example/v1/aggregate", token="t", payload=_retry_payload())
+    assert ok is True
+    assert calls["n"] == 3                 # two transient failures, third succeeds
+    assert sleeps == [0.25, 0.5]           # linear backoff between attempts
+
+
+def test_send_payload_gives_up_after_retries_on_persistent_5xx(monkeypatch):
+    """A persistent transient (503) exhausts retries and returns False."""
+    calls = {"n": 0}
+
+    def always_503(req, timeout=None):
+        calls["n"] += 1
+        raise _uerr.HTTPError("https://t.example", 503, "unavailable", {}, None)
+
+    monkeypatch.setattr("loopgain.telemetry._open_request", always_503)
+    monkeypatch.setattr("loopgain.telemetry.time.sleep", lambda s: None)
+
+    ok = send_payload("https://t.example/v1/aggregate", token="t", payload=_retry_payload(), retries=2)
+    assert ok is False
+    assert calls["n"] == 3                  # 1 initial + 2 retries
+
+
+def test_send_payload_does_not_retry_deterministic_4xx(monkeypatch):
+    """A 401 will never succeed on retry — fail fast, no backoff."""
+    calls = {"n": 0}
+    slept = {"n": 0}
+
+    def unauthorized(req, timeout=None):
+        calls["n"] += 1
+        raise _uerr.HTTPError("https://t.example", 401, "unauthorized", {}, None)
+
+    monkeypatch.setattr("loopgain.telemetry._open_request", unauthorized)
+    monkeypatch.setattr("loopgain.telemetry.time.sleep", lambda s: slept.__setitem__("n", slept["n"] + 1))
+
+    ok = send_payload("https://t.example/v1/aggregate", token="bad", payload=_retry_payload())
+    assert ok is False
+    assert calls["n"] == 1                  # no retry on a deterministic 4xx
+    assert slept["n"] == 0
+
+
+def test_send_payload_retries_zero_is_single_shot(monkeypatch):
+    """retries=0 restores the original single-attempt behavior."""
+    calls = {"n": 0}
+
+    def timeout(req, timeout=None):
+        calls["n"] += 1
+        raise TimeoutError()
+
+    monkeypatch.setattr("loopgain.telemetry._open_request", timeout)
+    monkeypatch.setattr("loopgain.telemetry.time.sleep", lambda s: None)
+
+    ok = send_payload("https://t.example/v1/aggregate", token="t", payload=_retry_payload(), retries=0)
+    assert ok is False
+    assert calls["n"] == 1
+
+
+def test_send_payload_never_raises_on_unexpected_error(monkeypatch):
+    """A non-transient, unexpected error is swallowed (best-effort), no retry."""
+    def boom(req, timeout=None):
+        raise RuntimeError("unexpected")
+
+    monkeypatch.setattr("loopgain.telemetry._open_request", boom)
+    monkeypatch.setattr("loopgain.telemetry.time.sleep", lambda s: None)
+
+    assert send_payload("https://t.example/v1/aggregate", token="t", payload=_retry_payload()) is False
+
+
+def test_is_transient_classification():
+    assert _tele._is_transient(TimeoutError()) is True
+    assert _tele._is_transient(_socket.timeout()) is True
+    assert _tele._is_transient(_uerr.URLError("dns")) is True
+    assert _tele._is_transient(_uerr.HTTPError("u", 503, "x", {}, None)) is True
+    assert _tele._is_transient(_uerr.HTTPError("u", 429, "x", {}, None)) is True
+    assert _tele._is_transient(_uerr.HTTPError("u", 400, "x", {}, None)) is False
+    assert _tele._is_transient(_uerr.HTTPError("u", 401, "x", {}, None)) is False
+    assert _tele._is_transient(RuntimeError("x")) is False

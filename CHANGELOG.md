@@ -6,6 +6,29 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-06-08
+
+Telemetry delivery reliability. Best-effort sends now survive a transient blip
+instead of silently dropping. Backward-compatible; additive parameters only,
+no public API change.
+
+### Changed
+- **`send_payload` / `LoopGain.send_telemetry` now retry transient failures.**
+  The warm round-trip to the receiver is ~150 ms, well inside the 2 s timeout,
+  but a transient outlier (a cold database first-write, a momentary network
+  blip) that blew past it was previously dropped with no retry — and a caller
+  that sends one aggregate per run would lose that whole run's data. Sends now
+  retry up to 2 times (3 attempts total) with a short linear backoff (0.25 s,
+  0.50 s) on *transient* failures only — timeouts, connection errors, and
+  `5xx`/`429` responses. Deterministic failures (`4xx` such as a bad token, a
+  malformed payload, a refused redirect) are **not** retried. Still fully
+  best-effort: the send path never raises and can never break the caller's loop.
+
+### Added
+- **`retries` and `retry_backoff` parameters** on `send_payload` and
+  `LoopGain.send_telemetry` (defaults `2` and `0.25`). Set `retries=0` to
+  restore the previous single-attempt behavior.
+
 ## [0.4.2] — 2026-06-05
 
 Correctness + telemetry. A statistics fix to the trajectory classifier (no

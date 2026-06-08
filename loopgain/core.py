@@ -514,6 +514,8 @@ class LoopGain:
         loop_type: Optional[str] = None,
         team: Optional[str] = None,
         include_per_iteration: bool = True,
+        retries: int = 2,
+        retry_backoff: float = 0.25,
     ) -> bool:
         """Send anonymized telemetry to a receiver endpoint.
 
@@ -544,6 +546,12 @@ class LoopGain:
                 per-iteration Aβ + error trajectories (capped) so the
                 dashboard's Loop Detail scrubber works. Set ``False`` to
                 send only aggregate summary stats.
+            retries: Additional attempts if a send fails *transiently*
+                (timeout, connection error, 5xx/429). Default 2 (up to 3
+                attempts). Set to 0 for single-shot. Deterministic failures
+                (bad token, etc.) are never retried.
+            retry_backoff: Base seconds between attempts; the nth retry waits
+                ``retry_backoff * n``. Default 0.25.
 
         Returns:
             ``True`` on 2xx response, ``False`` otherwise.
@@ -572,5 +580,11 @@ class LoopGain:
             include_per_iteration=include_per_iteration,
         )
         return send_payload(
-            endpoint, token, payload, timeout=timeout, allow_insecure=allow_insecure
+            endpoint,
+            token,
+            payload,
+            timeout=timeout,
+            allow_insecure=allow_insecure,
+            retries=retries,
+            retry_backoff=retry_backoff,
         )

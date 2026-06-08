@@ -22,7 +22,9 @@ from __future__ import annotations
 
 import json
 import math
+import socket
 import statistics
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -218,17 +220,42 @@ def build_payload(
     return payload
 
 
+def _is_transient(exc: BaseException) -> bool:
+    """Is this send failure worth retrying?
+
+    Transient = timeout, connection/DNS error, or a 5xx/429 from the server —
+    a later attempt might succeed. Deterministic failures (4xx other than 429,
+    a refused redirect) will never succeed on retry, so they are *not*
+    transient and we give up immediately.
+    """
+    if isinstance(exc, urllib.error.HTTPError):  # subclass of URLError — check first
+        return exc.code >= 500 or exc.code == 429
+    return isinstance(exc, (TimeoutError, socket.timeout, urllib.error.URLError, OSError))
+
+
 def send_payload(
     endpoint: str,
     token: str,
     payload: dict[str, Any],
     timeout: float = 2.0,
     allow_insecure: bool = False,
+    retries: int = 2,
+    retry_backoff: float = 0.25,
 ) -> bool:
     """POST a telemetry payload to the given endpoint.
 
     Best-effort: errors are swallowed; never raises. Returns ``True`` if
     the server returned a 2xx status, ``False`` otherwise.
+
+    A single send is one HTTP POST with a ``timeout``-second deadline. The
+    warm round-trip to the hosted receiver is ~150 ms, so the default 2 s
+    timeout has wide headroom; the failure mode in practice is a *transient*
+    outlier (a cold database first-write, a momentary network blip) that
+    blows past it. Because a low-frequency caller may send only one aggregate
+    per run, a single dropped send loses that whole run's data — so a transient
+    failure is retried up to ``retries`` times with a short linear backoff.
+    Deterministic failures (bad token, malformed payload, refused redirect)
+    are *not* retried. Still best-effort throughout: the loop never raises.
 
     Args:
         endpoint: Telemetry receiver URL (e.g.,
@@ -240,13 +267,18 @@ def send_payload(
         token: Bearer token issued by the receiver. Identifies the customer
             account; rotatable; not linked to any production secrets.
         payload: Dict from ``build_payload``.
-        timeout: Per-request timeout in seconds. Default 2.0.
+        timeout: Per-attempt timeout in seconds. Default 2.0.
         allow_insecure: If ``True``, permit ``http://`` endpoints. Intended
             for local development against a self-hosted receiver on
             ``http://localhost``. Default ``False``.
+        retries: Number of *additional* attempts after the first if the send
+            fails transiently. Default 2 (so up to 3 attempts total). Set to
+            0 to restore single-shot behavior.
+        retry_backoff: Base seconds to sleep between attempts; the nth retry
+            waits ``retry_backoff * n`` (0.25 s, 0.50 s, …). Default 0.25.
 
     Returns:
-        ``True`` on 2xx response, ``False`` otherwise.
+        ``True`` on a 2xx response, ``False`` otherwise.
     """
     # Refuse to attach the bearer token to anything but http(s); silently
     # best-effort so a misconfigured endpoint can't break the user's loop.
@@ -263,23 +295,33 @@ def send_payload(
 
     try:
         body = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            endpoint,
-            data=body,
-            method="POST",
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {token}",
-                "User-Agent": f"loopgain/{LIBRARY_VERSION}",
-            },
-        )
-        # Use the no-redirect seam so a malicious or misconfigured
-        # endpoint can't 302 the bearer token to a different host.
-        with _open_request(req, timeout) as resp:
-            return 200 <= resp.status < 300
     except Exception:
-        # Best-effort: never break the user's loop because telemetry failed.
-        # Catches URLError, HTTPError, TimeoutError, OSError, plus the
-        # ValueError that urllib raises for malformed URLs (e.g., missing scheme),
-        # plus any JSON-encoding edge case in the payload.
+        # A payload that won't JSON-encode will never send — don't retry.
         return False
+
+    req = urllib.request.Request(
+        endpoint,
+        data=body,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+            "User-Agent": f"loopgain/{LIBRARY_VERSION}",
+        },
+    )
+
+    attempts = max(1, retries + 1)
+    for i in range(attempts):
+        try:
+            # Use the no-redirect seam so a malicious or misconfigured
+            # endpoint can't 302 the bearer token to a different host.
+            with _open_request(req, timeout) as resp:
+                return 200 <= resp.status < 300
+        except Exception as exc:
+            # Best-effort: never break the user's loop because telemetry failed.
+            # Retry only transient failures, and only if attempts remain.
+            last = i == attempts - 1
+            if last or not _is_transient(exc):
+                return False
+            time.sleep(retry_backoff * (i + 1))
+    return False
