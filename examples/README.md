@@ -62,7 +62,7 @@ a comparison block at the end. Sample output from example 01:
   → kept LAST output. final error=0
 
 ─── WITH LOOPGAIN: target_error=0, max_iterations=5 ───
-  iter  1  error=  0.00  state=TARGET_MET      eta=—
+  iter  1  error=  0.00  state=TARGET_MET
 
 outcome:        converged
 iterations:     1

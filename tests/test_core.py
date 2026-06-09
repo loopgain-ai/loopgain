@@ -2,7 +2,7 @@
 
 Covers the five band transitions, the three canonical scenarios from the
 spec (converging / oscillating / diverging), TARGET_MET short-circuit,
-best-so-far buffer correctness, and ETA calibration.
+and best-so-far buffer correctness.
 """
 
 from __future__ import annotations
@@ -179,109 +179,6 @@ def test_best_so_far_works_without_outputs():
     assert result.best_error == 2.0
 
 
-# ----- ETA prediction calibration -----
-
-
-def test_eta_prediction_calibration():
-    """Synthetic monotonic decay: predicted iterations matches actual ±1."""
-    target = 0.1
-    ab = 0.5
-    errors = _decay(ab, e0=100.0)
-    # Iteration index where error first drops below target.
-    actual_n = next(i for i, e in enumerate(errors) if e < target)
-
-    lg = LoopGain(target_error=target, max_iterations=100)
-    # Feed a few errors so smoothed Aβ stabilizes.
-    lg.observe(errors[0])
-    lg.observe(errors[1])
-    lg.observe(errors[2])
-    # ETA at this point should predict ~(actual_n - 2) more iterations.
-    eta = lg.eta
-    assert eta is not None
-    assert abs(eta - (actual_n - 2)) <= 1, f"eta={eta}, expected ~{actual_n - 2}"
-
-
-def test_eta_none_when_not_converging():
-    """ETA is None when Aβ_smooth >= 1 (non-converging)."""
-    lg = LoopGain(target_error=0.5)
-    for _ in range(3):
-        lg.observe(10.0)  # constant errors -> Aβ = 1
-        if not lg.should_continue():
-            break
-    assert lg.eta is None
-
-
-def test_eta_none_when_target_is_zero():
-    lg = LoopGain(target_error=0.0)
-    lg.observe(100.0)
-    lg.observe(50.0)
-    assert lg.eta is None
-
-
-# ----- First-eta snapshot (for ETA Accuracy dashboard panel) -----
-
-
-def test_first_eta_snapshot_captured_during_converging_run():
-    """Result carries the first non-None eta and the iter it was made at."""
-    target = 0.1
-    errors = _decay(0.5, e0=100.0)
-    lg = LoopGain(target_error=target, max_iterations=100)
-    for e in errors:
-        lg.observe(e)
-        if not lg.should_continue():
-            break
-
-    result = lg.result
-    # First eta becomes computable on the 2nd observation (smoothed_history
-    # exists, target > 0, current > target, Aβ_smooth < 1).
-    assert result.first_eta_at_iteration == 2
-    assert result.first_eta_prediction is not None
-    assert result.first_eta_prediction > 0
-    # Predicted total iterations should be within ±2 of actual (the prediction
-    # is made early, before smoothing has fully settled).
-    predicted_total = result.first_eta_at_iteration + result.first_eta_prediction
-    assert abs(predicted_total - result.iterations_used) <= 2
-
-
-def test_first_eta_snapshot_none_when_target_is_zero():
-    """No prediction is captured when target_error=0 (eta is always None)."""
-    lg = LoopGain(target_error=0.0, max_iterations=5)
-    for _ in range(5):
-        lg.observe(10.0)
-    result = lg.result
-    assert result.first_eta_prediction is None
-    assert result.first_eta_at_iteration is None
-
-
-def test_first_eta_snapshot_none_when_loop_never_converges():
-    """Oscillating loop (Aβ ≈ 1) never produces a positive eta."""
-    lg = LoopGain(target_error=0.5)
-    for _ in range(5):
-        lg.observe(10.0)
-        if not lg.should_continue():
-            break
-    result = lg.result
-    assert result.first_eta_prediction is None
-    assert result.first_eta_at_iteration is None
-
-
-def test_first_eta_snapshot_is_idempotent():
-    """Subsequent observations don't overwrite the first prediction."""
-    target = 0.1
-    errors = _decay(0.5, e0=100.0)
-    lg = LoopGain(target_error=target, max_iterations=100)
-    lg.observe(errors[0])
-    lg.observe(errors[1])
-    first = lg._first_eta_prediction
-    first_iter = lg._first_eta_at_iteration
-    assert first is not None
-    # Run a few more iterations; the snapshot should not change.
-    for e in errors[2:6]:
-        lg.observe(e)
-    assert lg._first_eta_prediction == first
-    assert lg._first_eta_at_iteration == first_iter
-
-
 # ----- observe() input coercion -----
 
 
@@ -351,23 +248,6 @@ def test_max_iterations_with_converging_loop():
     assert lg.state == MAX_ITERATIONS
     assert lg.result.outcome == "max_iterations"
     assert not lg.should_continue()
-
-
-# ----- gain_margin -----
-
-
-def test_gain_margin_greater_than_one_for_converging():
-    lg = LoopGain(max_iterations=10)
-    for e in _decay(0.5)[:5]:
-        lg.observe(e)
-    gm = lg.gain_margin
-    assert gm is not None
-    assert gm > 1.0
-
-
-def test_gain_margin_none_before_observations():
-    lg = LoopGain()
-    assert lg.gain_margin is None
 
 
 # ----- result before any observations -----

@@ -161,7 +161,7 @@ def loopgain_run(client):
         n, raw, errs = one_iteration(client, raw, errs)
         preview = f"{n} err; " + (errs[0] if errs else "valid")
         state = lg.observe(n, output=raw)
-        print_iteration(lg.result.iterations_used, n, state, lg.eta, preview)
+        print_iteration(lg.result.iterations_used, n, state, preview)
     print_result(lg)
     return lg
 

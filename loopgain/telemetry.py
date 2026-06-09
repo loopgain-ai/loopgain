@@ -37,12 +37,11 @@ def _safe_float(x: Any) -> Any:
 
     Standard JSON (RFC 8259) forbids Infinity and NaN literals. Python's
     json.dumps emits them by default, and strict parsers — including the
-    Cloudflare-side receiver — reject the payload. gain_margin in particular
-    is 1/max(Aβ_smooth) and goes to +inf whenever the smoothed gain is zero
-    (e.g. a constant-error trajectory). Aβ values themselves can go to inf
-    if a previous error is exactly zero. Collapsing to None keeps the
-    dashboard's "no data" semantics intact instead of dropping the whole
-    payload.
+    Cloudflare-side receiver — reject the payload. Aβ values can go to inf
+    if a previous error is exactly zero, so the convergence-profile summary
+    and per-iteration arrays are wrapped in this coercion. Collapsing to None
+    keeps the dashboard's "no data" semantics intact instead of dropping the
+    whole payload.
     """
     if isinstance(x, float) and not math.isfinite(x):
         return None
@@ -86,12 +85,14 @@ if TYPE_CHECKING:
 
 
 # Schema version is incremented when the payload format breaks compatibility.
-# v2 (2026-05-13) adds first_eta_prediction + first_eta_at_iteration for the
-# ETA Accuracy dashboard panel. v3 (2026-05-14) adds the optional
-# per_iteration block (capped trajectories) and the framework/loop_type/team
-# classification fields. Receiver remains backward-compatible: v1/v2 payloads
-# are still accepted (new fields default to None / NULL).
-SCHEMA_VERSION = 3
+# v2 (2026-05-13) added an ETA-calibration block and v1 carried a gain_margin
+# field; both were removed in v4 (2026-06-09) when ETA and gain margin were
+# discontinued (neither fired reliably on real trajectories). v3 (2026-05-14)
+# added the optional per_iteration block (capped trajectories) and the
+# framework/loop_type/team classification fields. The receiver remains
+# backward-compatible: older payloads are still accepted and the dropped
+# fields are simply ignored.
+SCHEMA_VERSION = 4
 
 
 # Library version sourced from loopgain._version so there's exactly one
@@ -176,7 +177,6 @@ def build_payload(
         "loop": {
             "outcome": result.outcome,
             "iterations_used": result.iterations_used,
-            "gain_margin": _safe_float(result.gain_margin),
             "savings_vs_fixed_cap": result.savings_vs_fixed_cap,
             "convergence_profile_summary": profile_summary,
             "rollback_triggered": result.outcome in ("oscillating", "diverged"),
@@ -185,13 +185,6 @@ def build_payload(
             # (iterations_used-1-best_index) — the "Iteration Waste" view.
             # Privacy-safe: an integer position, no output/error content.
             "best_index": result.best_index,
-            # v2: first computable eta snapshot, for ETA calibration dashboard.
-            # Predicted total iterations = first_eta_at_iteration +
-            # first_eta_prediction; compare to iterations_used to compute the
-            # calibration error. Both are None when no prediction was made
-            # (target_error=0, loop never looked convergent, etc.).
-            "first_eta_prediction": result.first_eta_prediction,
-            "first_eta_at_iteration": result.first_eta_at_iteration,
         },
         "thresholds": {
             "fast_converge": lg.thresholds.fast_converge,

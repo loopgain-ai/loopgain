@@ -134,7 +134,7 @@ def loopgain_run(client, conn):
         first_line = sql.splitlines()[0] if sql else "[no sql]"
         preview = f"{msg}; {first_line}"
         state = lg.observe(err, output=sql)
-        print_iteration(lg.result.iterations_used, err, state, lg.eta, preview)
+        print_iteration(lg.result.iterations_used, err, state, preview)
     print_result(lg)
     return lg
 

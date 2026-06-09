@@ -107,7 +107,7 @@ def loopgain_run(client):
         wc = len(current.split())
         preview = f"{wc}w; missing={err}/{len(FACTS)}: {missing[:2]}"
         state = lg.observe(err, output=current)
-        print_iteration(lg.result.iterations_used, err, state, lg.eta, preview)
+        print_iteration(lg.result.iterations_used, err, state, preview)
     print_result(lg)
     return lg
 

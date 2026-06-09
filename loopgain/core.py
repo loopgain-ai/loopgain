@@ -9,8 +9,7 @@ real-time loop-gain monitor that classifies the loop into one of five
 named states and decides whether to continue, stop, or roll back.
 
 The math is foundational EE control theory. The product layer is the
-threshold bands, the best-so-far buffer, the ETA prediction, and the
-clean Python API.
+threshold bands, the best-so-far buffer, and the clean Python API.
 
 License: Apache-2.0
 """
@@ -121,27 +120,9 @@ class LoopGainResult:
     error_history: list[float] = field(default_factory=list)
     """All observed error magnitudes, in order."""
 
-    gain_margin: Optional[float] = None
-    """``1 / max(Aβ_smooth)``. > 1 means stable headroom; < 1 means the
-    loop crossed into oscillation/divergence at some point."""
-
     savings_vs_fixed_cap: Optional[int] = None
     """Iterations saved versus the assumed fixed cap (default 10).
     Zero if the loop hit ``max_iterations``; otherwise non-negative."""
-
-    first_eta_prediction: Optional[int] = None
-    """First non-None ``eta`` snapshot captured during the loop —
-    the predicted iterations-remaining at the moment the prediction
-    became computable. ``None`` if no prediction was ever made
-    (e.g., ``target_error`` is ``None`` or ``0`` so the prediction
-    formula is undefined, loop never converged toward target, or the
-    loop terminated before two observations)."""
-
-    first_eta_at_iteration: Optional[int] = None
-    """Iteration count when ``first_eta_prediction`` was captured.
-    ``None`` if no prediction was ever made. Predicted *total*
-    iterations = ``first_eta_at_iteration + first_eta_prediction``,
-    comparable to ``iterations_used`` for calibration."""
 
 
 class LoopGain:
@@ -239,8 +220,6 @@ class LoopGain:
         self._state: str = INIT
         self._state_history: list[str] = []
         self._terminal: bool = False
-        self._first_eta_prediction: Optional[int] = None
-        self._first_eta_at_iteration: Optional[int] = None
 
         # Opt-in anonymous funnel telemetry (see loopgain.funnel). No-op
         # unless the user has explicitly opted in; fully fail-silent and
@@ -348,17 +327,6 @@ class LoopGain:
             self._state = MAX_ITERATIONS
             self._terminal = True
 
-        # Snapshot the first computable eta prediction for calibration.
-        # eta is None until smoothing settles and the loop looks convergent;
-        # we capture the *first* value it produces and the iteration it was
-        # produced at, so predicted_total = at_iter + eta is comparable to
-        # iterations_used.
-        if self._first_eta_prediction is None:
-            eta_now = self.eta
-            if eta_now is not None and eta_now > 0:
-                self._first_eta_prediction = eta_now
-                self._first_eta_at_iteration = len(self._error_history)
-
         # Funnel telemetry: if this observation drove the loop terminal
         # (oscillating / diverging / stalled / max-iterations), count the
         # coarse outcome. The TARGET_MET case is handled at its early return.
@@ -381,46 +349,6 @@ class LoopGain:
     def state(self) -> str:
         """Current state name."""
         return self._state
-
-    @property
-    def eta(self) -> Optional[int]:
-        """Predicted iterations remaining to reach ``target_error``.
-
-        Closed-form Barkhausen prediction:
-
-            n_remaining = log(E_target / E_current) / log(Aβ_smooth)
-
-        Returns ``None`` when the prediction isn't well-defined:
-        no Aβ yet, ``target_error`` is ``None`` (no target to predict
-        against) or ``0`` (the formula has a log-of-zero singularity),
-        target already met, or ``Aβ_smooth >= 1`` (non-converging gain).
-        """
-        if not self._smoothed_history or not self._error_history:
-            return None
-        if self.target_error is None or self.target_error <= 0:
-            return None
-        e_current = self._error_history[-1]
-        if e_current <= self.target_error:
-            return 0
-        ab_smooth = self._smoothed_history[-1]
-        if ab_smooth >= 1.0 or ab_smooth <= 0:
-            return None
-        n = math.log(self.target_error / e_current) / math.log(ab_smooth)
-        return max(0, math.ceil(n))
-
-    @property
-    def gain_margin(self) -> Optional[float]:
-        """Gain margin ``GM = 1 / max(Aβ_smooth)``.
-
-        ``GM > 1`` means the loop never crossed into oscillation. The
-        larger, the more headroom. Returns ``None`` if no Aβ data yet.
-        """
-        if not self._smoothed_history:
-            return None
-        max_g = max(self._smoothed_history)
-        if max_g == 0:
-            return float("inf")
-        return 1.0 / max_g
 
     @property
     def result(self) -> LoopGainResult:
@@ -468,10 +396,7 @@ class LoopGain:
             best_error=best_error,
             convergence_profile=list(self._smoothed_history),
             error_history=list(self._error_history),
-            gain_margin=self.gain_margin,
             savings_vs_fixed_cap=savings,
-            first_eta_prediction=self._first_eta_prediction,
-            first_eta_at_iteration=self._first_eta_at_iteration,
         )
 
     # ----- Internal helpers -----

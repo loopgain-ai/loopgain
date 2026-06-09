@@ -53,7 +53,6 @@ result = lg.result
 print(result.outcome)              # "converged" | "oscillating" | "diverged" | "stalled" | "max_iterations"
 print(result.best_output)          # the lowest-error iteration's output
 print(result.iterations_used)
-print(result.gain_margin)          # 1 / max(Aβ_smooth)
 print(result.savings_vs_fixed_cap)
 ```
 
@@ -164,17 +163,9 @@ Returns `False` once a terminal state fires.
 
 Current state name. One of `INIT`, `FAST_CONVERGE`, `CONVERGING`, `STALLING`, `OSCILLATING`, `DIVERGING`, `TARGET_MET`, `MAX_ITERATIONS`. The corresponding terminal `result.outcome` values are `converged`, `oscillating`, `diverged`, `stalled` (v0.2 trajectory mode only — STALLING terminating after 2 consecutive readings), `max_iterations`, or `in_progress`.
 
-### `lg.eta -> int | None`
-
-Best-effort closed-form estimate of iterations remaining, exposed for instrumentation. Returns `None` whenever it isn't well-defined — which is most of the time on real, jump-dominated loops, so don't depend on it for control.
-
-### `lg.gain_margin -> float | None`
-
-`1 / max(Aβ_smooth)`. `> 1` means stable headroom across the entire run.
-
 ### `lg.result -> LoopGainResult`
 
-Terminal result with `outcome`, `iterations_used`, `best_index`, `best_output`, `best_error`, `convergence_profile`, `error_history`, `gain_margin`, `savings_vs_fixed_cap`. Safe to call mid-loop.
+Terminal result with `outcome`, `iterations_used`, `best_index`, `best_output`, `best_error`, `convergence_profile`, `error_history`, `savings_vs_fixed_cap`. Safe to call mid-loop.
 
 ### `lg.send_telemetry(endpoint, token, workload_id=None, timeout=2.0, allow_insecure=False, framework=None, loop_type=None, team=None, include_per_iteration=True) -> bool`
 

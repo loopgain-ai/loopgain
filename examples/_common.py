@@ -87,15 +87,13 @@ def send_telemetry(lg, *, workload_id: str, loop_type: str) -> None:
     print(f"telemetry sent: {ok}")
 
 
-def print_iteration(i: int, error: float, state: str, eta, preview: str = "") -> None:
+def print_iteration(i: int, error: float, state: str, preview: str = "") -> None:
     """One-line trace per iteration. Truncates preview to keep output legible."""
-    eta_str = str(eta) if eta is not None else "—"
     preview = (preview or "").replace("\n", " ")
     if len(preview) > 60:
         preview = preview[:57] + "..."
     print(
-        f"  iter {i:>2}  error={error:6.2f}  state={state:<14}  "
-        f"eta={eta_str:<3}  {preview}"
+        f"  iter {i:>2}  error={error:6.2f}  state={state:<14}  {preview}"
     )
 
 
@@ -105,8 +103,6 @@ def print_result(lg) -> None:
     print(f"outcome:        {r.outcome}")
     print(f"iterations:     {r.iterations_used}")
     print(f"best_error:     {r.best_error:.2f}")
-    margin = f"{r.gain_margin:.3f}" if r.gain_margin else "n/a"
-    print(f"gain_margin:    {margin}")
     print(f"savings:        {r.savings_vs_fixed_cap}")
 
 

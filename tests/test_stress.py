@@ -130,8 +130,7 @@ def test_very_large_error_magnitudes():
         lg.observe(e)
     # Aβ = 0.4 → FAST_CONVERGE.
     assert lg.state in (FAST_CONVERGE, CONVERGING)
-    assert lg.gain_margin is not None
-    assert lg.gain_margin > 1.0
+    assert lg.result.convergence_profile  # Aβ computed without overflow
 
 
 def test_zero_error_in_middle_of_run_anomalous():
@@ -243,19 +242,6 @@ def test_result_callable_mid_loop():
     lg.observe(2.5)
     r2 = lg.result
     assert r2.iterations_used == 3
-
-
-def test_eta_before_any_observation():
-    """eta on a fresh instance is None, not a crash."""
-    lg = LoopGain(target_error=0.5)
-    assert lg.eta is None
-
-
-def test_gain_margin_with_single_observation():
-    """Single observation has no Aβ yet → gain_margin is None."""
-    lg = LoopGain()
-    lg.observe(10.0)
-    assert lg.gain_margin is None
 
 
 # ----- Mixed input types -----

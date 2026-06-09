@@ -6,6 +6,31 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-06-09
+
+Removed two derived signals — **ETA prediction** and **gain margin** — that did
+not hold up on real agent loops. Both were tested against the public benchmark
+and neither earned its place: the closed-form ETA is ill-posed at `target_error
+= 0` (the dominant real task class) and fired on a tiny fraction of trajectories;
+gain margin (`1 / max(Aβ_smooth)`) is undefined for the majority of loops that
+converge in a single iteration, so it could only ever describe the struggling
+minority. Rather than ship signals we don't trust, they're gone from every
+public surface. The reasoning is preserved in the benchmark `LESSONS.md`.
+
+This is a **breaking change** to the public result object and the telemetry
+payload, hence the minor-version bump.
+
+### Removed
+- **`LoopGainResult.gain_margin`**, the **`LoopGain.gain_margin`** property, and
+  the **`LoopGain.eta`** property are removed. The underlying Aβ trajectory is
+  unaffected — `result.convergence_profile` (the smoothed loop-gain values) and
+  the five-band classifier are unchanged.
+- **`LoopGainResult.first_eta_prediction`** and
+  **`LoopGainResult.first_eta_at_iteration`** are removed.
+- The telemetry payload no longer carries `gain_margin`,
+  `first_eta_prediction`, or `first_eta_at_iteration`. **Schema bumped to v4.**
+  The receiver still accepts older payloads; the dropped fields are ignored.
+
 ## [0.4.3] — 2026-06-08
 
 Telemetry delivery reliability. Best-effort sends now survive a transient blip

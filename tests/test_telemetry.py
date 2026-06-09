@@ -53,7 +53,6 @@ def test_payload_loop_section_has_outcome_and_stats():
     loop = p["loop"]
     assert loop["outcome"] == "converged"
     assert loop["iterations_used"] == 4
-    assert loop["gain_margin"] is not None
     assert loop["savings_vs_fixed_cap"] is not None
     assert "convergence_profile_summary" in loop
     assert "rollback_triggered" in loop
@@ -120,7 +119,7 @@ def test_payload_workload_id_optional():
 
 
 def test_payload_serializes_strict_json_for_constant_error_trajectory():
-    """A constant-error trajectory pushes gain_margin to +inf (1/max(Aβ)=1/0).
+    """A zero-error trajectory pushes Aβ to +inf (E(n)/E(n-1) with E(n-1)=0).
 
     Standard JSON forbids Infinity / NaN, and the receiver rejects payloads
     that include them. The build_payload sanitizer must coerce non-finite
@@ -135,8 +134,8 @@ def test_payload_serializes_strict_json_for_constant_error_trajectory():
     # Strict round-trip: allow_nan=False raises on inf/nan.
     encoded = json.dumps(p, allow_nan=False)
     decoded = json.loads(encoded)
-    assert decoded["loop"]["gain_margin"] is None
-    # Per-iteration Aβ values can also be non-finite (E(n)/E(n-1) with E(n-1)=0).
+    # Per-iteration Aβ values can be non-finite (E(n)/E(n-1) with E(n-1)=0)
+    # and the convergence-profile summary must stay finite-or-None too.
     for v in decoded["per_iteration"]["convergence_profile"]:
         assert v is None or isinstance(v, (int, float))
 
@@ -190,50 +189,24 @@ def test_payload_for_not_started_loop():
     assert p["loop"]["convergence_profile_summary"]["samples"] == 0
 
 
-# ----- v2 schema: ETA calibration fields -----
+# ----- schema version -----
 
 
-def test_payload_schema_version_is_v3():
-    """Schema bumped to v3 with the addition of per_iteration + classification."""
-    assert SCHEMA_VERSION == 3
+def test_payload_schema_version_is_v4():
+    """Schema bumped to v4 when ETA + gain_margin were removed from the payload."""
+    assert SCHEMA_VERSION == 4
     lg = _make_terminated_loop()
     p = build_payload(lg)
-    assert p["schema_version"] == 3
+    assert p["schema_version"] == 4
 
 
-def test_payload_includes_first_eta_fields_when_loop_converged():
-    """A converging loop produces a captured eta snapshot."""
+def test_payload_loop_section_drops_eta_and_gain_margin():
+    """v4 no longer carries the discontinued ETA / gain_margin fields."""
     lg = _make_terminated_loop()
-    p = build_payload(lg)
-    loop = p["loop"]
-    assert "first_eta_prediction" in loop
-    assert "first_eta_at_iteration" in loop
-    assert loop["first_eta_prediction"] is not None
-    assert loop["first_eta_at_iteration"] is not None
-    assert loop["first_eta_prediction"] > 0
-    assert loop["first_eta_at_iteration"] >= 2
-
-
-def test_payload_first_eta_none_for_target_zero():
-    """target_error=0 means eta is never computable; both fields are None."""
-    lg = LoopGain(target_error=0.0, max_iterations=4)
-    for _ in range(4):
-        lg.observe(10.0)
-    p = build_payload(lg)
-    assert p["loop"]["first_eta_prediction"] is None
-    assert p["loop"]["first_eta_at_iteration"] is None
-
-
-def test_payload_first_eta_none_for_diverging_loop():
-    """A divergent loop never produces a positive eta."""
-    lg = LoopGain(target_error=0.5, max_iterations=20)
-    for e in [10.0, 12.0, 15.0, 20.0, 30.0]:
-        if not lg.should_continue():
-            break
-        lg.observe(e)
-    p = build_payload(lg)
-    assert p["loop"]["first_eta_prediction"] is None
-    assert p["loop"]["first_eta_at_iteration"] is None
+    loop = build_payload(lg)["loop"]
+    assert "gain_margin" not in loop
+    assert "first_eta_prediction" not in loop
+    assert "first_eta_at_iteration" not in loop
 
 
 # ----- send_payload behavior -----

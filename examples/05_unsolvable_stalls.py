@@ -147,7 +147,7 @@ def loopgain_run(client):
         first_line = code.splitlines()[0] if code else "[no code]"
         preview = f"err={err}; {reason}; {first_line}"
         state = lg.observe(err, output=code)
-        print_iteration(lg.result.iterations_used, err, state, lg.eta, preview)
+        print_iteration(lg.result.iterations_used, err, state, preview)
     print_result(lg)
     return lg
 

@@ -124,7 +124,7 @@ def loopgain_run(client):
         avg = 10.0 - err
         preview = f"avg={avg:.2f}; " + (essay.splitlines()[0] if essay else "")
         state = lg.observe(err, output=essay)
-        print_iteration(lg.result.iterations_used, err, state, lg.eta, preview)
+        print_iteration(lg.result.iterations_used, err, state, preview)
     print_result(lg)
     return lg
 

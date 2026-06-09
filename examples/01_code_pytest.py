@@ -148,7 +148,7 @@ def loopgain_run(client, workdir: Path):
     while lg.should_continue():
         failures, code, fail_out = one_iteration(client, workdir, code, fail_out)
         state = lg.observe(failures, output=code)
-        print_iteration(lg.result.iterations_used, failures, state, lg.eta)
+        print_iteration(lg.result.iterations_used, failures, state)
     print_result(lg)
     return lg
 
