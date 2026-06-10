@@ -7,8 +7,7 @@
 - `component-algebra-v2-protocol-final-4.md` §3.3 (parent v2 protocol)
 - `loopgain/core.py` (v0.1 single-feature classifier — being replaced)
 - `results/experiment_3_results.json` (v1 result: 37.3% overall accuracy)
-- `~/MyWiki/ai-research/wiki/concepts/concept-grokking-prediction-signals.md`
-- `~/MyWiki/orbit-hopfield/wiki/syntheses/s4-grokking-track.md`
+- internal research notes on grokking / prediction-signal classifiers (not public)
 
 ## Problem statement
 

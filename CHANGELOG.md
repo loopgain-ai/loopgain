@@ -6,6 +6,25 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-06-10
+
+Documentation-only patch. No library, API, or behaviour change from 0.5.1.
+
+- **Privacy contract corrected to match the code.** The README's telemetry
+  section previously said individual Aβ values are never sent — but with the
+  default `include_per_iteration=True`, `send_telemetry` includes a
+  length-capped per-iteration trajectory (smoothed Aβ values and numeric error
+  magnitudes; it drives the dashboard's convergence-profile scrubbing). The
+  README now discloses this and notes `include_per_iteration=False` sends the
+  aggregate summary only. What is never sent is unchanged: prompts,
+  completions, error contents, the output buffer, or any customer identity
+  beyond the bearer token.
+- Honest-limits bullet now carries the measured wrong-fixed-point rate
+  (4.5% of converged runs on the benchmark's code-gen workload), with the
+  false-stop rate disambiguated from it.
+- Removed a leftover ETA-era phrase from the Background section; "median cut"
+  corrected to "total" for the 92.8% benchmark claim.
+
 ## [0.5.1] — 2026-06-09
 
 Documentation-only patch. No library, API, or behaviour change from 0.5.0.

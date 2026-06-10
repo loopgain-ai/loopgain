@@ -155,11 +155,11 @@ The receiver and dashboard are both open-source — self-host to keep telemetry 
 
 ## What LoopGain does and doesn't guarantee
 
-LoopGain saves money by stopping a loop once it stops improving — fewer iterations, fewer tokens. In our [public benchmark](https://github.com/loopgain-ai/loopgain-bench), that was a **92.8% median cut in API spend** vs `max_iterations=20`, with output quality preserved. Two honest limits:
+LoopGain saves money by stopping a loop once it stops improving — fewer iterations, fewer tokens. In our [public benchmark](https://github.com/loopgain-ai/loopgain-bench), that was a **92.8% cut in total API spend** vs `max_iterations=20`, with output quality preserved. Two honest limits:
 
 - **Savings depend on your workload.** Loops that usually succeed fast save the most (~96%); adversarial, failure-prone loops save less (~78–84%). The headline is a blend — run the benchmark on your own loops before quoting a number.
 - **LoopGain detects convergence, not correctness.** It stops when your error signal stops improving — which means more iterations won't help, *not* that the loop succeeded. On the benchmark this preserved quality (it rarely stopped early on a worse output; false-stop rate ≤4.5%), but a loop can stall with the error still above zero — a plateau at, say, 2 failing tests. So check `result.best_error` (or your own pass/fail) before you trust the output: if it plateaued short of your target, that's a quality gap LoopGain can't see, and a false stop that forces a rerun is the one way it eats into the savings. LoopGain decides *when to stop*; you decide *whether the answer is good enough*.
-- **LoopGain is only as right as your verifier.** It acts on the error signal you give it. If your verifier reports zero errors, LoopGain trusts that and stops — so a verifier with blind spots can report success on an answer that is still wrong, and LoopGain will confidently stop there. This is not the plateau case above: the error reads zero and the loop looks like a clean success, so neither LoopGain nor its convergence signal can flag it. The quality of the stop is bounded by the quality of the check behind your error signal. Pair LoopGain with the strongest verifier you can afford at the stop — executable tests over a sampled subset, a schema or type check over a vibe, a held-out check the loop didn't optimize against. **[How to design a strong verifier](https://loopgain.ai/blog/posts/how-to-design-a-strong-verifier/)** is a field guide to exactly this.
+- **LoopGain is only as right as your verifier.** It acts on the error signal you give it. If your verifier reports zero errors, LoopGain trusts that and stops — so a verifier with blind spots can report success on an answer that is still wrong, and LoopGain will confidently stop there. This is not the plateau case above: the error reads zero and the loop looks like a clean success, so neither LoopGain nor its convergence signal can flag it. The quality of the stop is bounded by the quality of the check behind your error signal. We measured this on the benchmark's code-gen workload: **4.5% of converged runs (16/355) passed every check the loop ran but failed the full held-out test suite** — and that's a floor, not a ceiling, because the in-loop verifier there was strong; a weaker verifier exposes more. (Distinct from the ≤4.5% false-stop rate above — the numbers coincide, the failure modes don't.) Pair LoopGain with the strongest verifier you can afford at the stop — executable tests over a sampled subset, a schema or type check over a vibe, a held-out check the loop didn't optimize against. **[How to design a strong verifier](https://loopgain.ai/blog/posts/how-to-design-a-strong-verifier/)** is a field guide to exactly this.
 
 ---
 
@@ -223,9 +223,9 @@ python3 -c "import keyring; keyring.set_password('loopgain', 'telemetry', input(
 # Then in code: keyring.get_password('loopgain', 'telemetry')
 ```
 
-What is sent: state transitions, Aβ summary (min/max/median), rollback flag, iterations used, savings, library version, optional opaque `workload_id`, threshold config, hour-bucketed timestamp.
+What is sent: state transitions, Aβ summary (min/max/median), rollback flag, iterations used, savings, library version, optional opaque `workload_id`, threshold config, hour-bucketed timestamp — and, unless you pass `include_per_iteration=False`, a length-capped per-iteration trajectory (smoothed Aβ values and numeric error magnitudes; this is what drives the dashboard's convergence-profile scrubbing).
 
-**What is NEVER sent: prompts, completions, error contents, output buffer, individual Aβ values, or any customer identity beyond the bearer token.** Privacy contract is enforced by the payload-shape unit tests in `tests/test_telemetry.py`.
+**What is NEVER sent: prompts, completions, error contents, the output buffer, or any customer identity beyond the bearer token.** Numeric error *magnitudes* are sent (they're the loop-gain signal); error *contents* never are. Privacy contract is enforced by the payload-shape unit tests in `tests/test_telemetry.py`.
 
 The hosted endpoint at `telemetry.loopgain.ai` is one acceptable destination. The [receiver](https://github.com/loopgain-ai/telemetry-receiver) and [dashboard](https://github.com/loopgain-ai/dashboard) are both open-source — self-host to keep telemetry fully under your control.
 
@@ -484,7 +484,7 @@ This is alpha software. The API may break before 1.0 if production usage surface
 
 LoopGain applies the **Barkhausen stability criterion** (Heinrich Barkhausen, 1921 — the foundational result on when feedback amplifiers oscillate) to AI agent feedback loops. The criterion was originally a way to predict whether an electronic oscillator would sustain oscillation; it turns out to map cleanly onto any feedback loop you can attach an error signal to.
 
-The cleanest summary: an iterative AI loop with a measurable error signal is a feedback system. The ratio `E(n) / E(n-1)` is its empirical loop gain. The Barkhausen result tells you that loop gain less than 1 converges, equal to 1 oscillates, greater than 1 diverges. LoopGain operationalizes this: classifies the loop's current band, decides what to do, and tells you when you'll converge.
+The cleanest summary: an iterative AI loop with a measurable error signal is a feedback system. The ratio `E(n) / E(n-1)` is its empirical loop gain. The Barkhausen result tells you that loop gain less than 1 converges, equal to 1 oscillates, greater than 1 diverges. LoopGain operationalizes this: classifies the loop's current band, and decides what to do — stop, continue, or roll back to the best output seen so far.
 
 Loop types this applies to in practice:
 
