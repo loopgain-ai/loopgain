@@ -47,6 +47,10 @@ def _print_status() -> None:
     print("Change it:  loopgain telemetry --enable | --disable")
     print("            or set LOOPGAIN_TELEMETRY=1|0  (DO_NOT_TRACK=1 also opts out)")
     print("Details:    TELEMETRY.md")
+    if not s["enabled"]:
+        print()
+        print("If LoopGain is useful to you, opting in is the cheapest way to support")
+        print("the project — these counts are the only adoption signal it has.")
 
 
 def _handle_telemetry(args: argparse.Namespace) -> int:

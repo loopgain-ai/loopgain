@@ -245,6 +245,8 @@ loopgain telemetry --disable    # opt out  (or: export LOOPGAIN_TELEMETRY=0)
 
 `DO_NOT_TRACK=1` is honored as a hard opt-out, and CI environments are auto-detected and declined silently. When enabled, payloads carry only a locally-generated random id (not derived from your machine), hour-bucketed timestamps, library/Python/OS versions, the adapter in use, and a coarse outcome count. **Prompts, outputs, error contents, keys, paths, and IPs are never collected.** Delivery is batched, async, https-only, and fail-silent — it can never break your loop. Full details and the privacy contract: **[TELEMETRY.md](TELEMETRY.md)**.
 
+If LoopGain is useful to you, opting in is the cheapest way to support the project — these counts are the only signal a solo-maintained library has that it's working for anyone.
+
 ---
 
 ## Command-line interface
