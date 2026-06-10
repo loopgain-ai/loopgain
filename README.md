@@ -4,18 +4,23 @@
 
 AI agent loops waste time and money when they don't know when to stop. LoopGain measures the loop in real time and stops it the moment it has actually converged — and rolls back before it degrades — instead of running to a fixed `max_iterations` cap.
 
-> **Across 2,000 paired trials over 10 cells**, LoopGain reduced total API spend by **92.8%** vs `max_iter=20`, dropped median wall-clock latency from 30.9s to 2.1s (**~15×**), preserved output quality on natural-distribution workloads (W1–W4: judge winrate 0.50–0.63, CI excluding null on most cells), and improved output quality on engineered-failure workloads (W5: winrate 0.92–0.95 across three adapters). Weighted-average pairwise preference for LG vs B20 across 1,800 judge comparisons: **0.678**. Zero of six kill criteria fired.
+> **Benchmark — 2,000 paired trials across 10 workload cells** ([run it yourself](https://github.com/loopgain-ai/loopgain-bench)):
+>
+> - **92.8% less API spend** than `max_iter=20` — $27.05 → $1.94 in total benchmark spend
+> - **~15× faster** — median wall-clock per trial 30.9s → 2.1s
+> - **Quality preserved, not traded for speed** — judge win-rate 0.50–0.63 on natural-distribution workloads (W1–W4, CI excluding null on most cells), 0.92–0.95 on engineered-failure workloads (W5); 0.678 weighted preference across 1,800 judge comparisons
+> - **Zero of six kill criteria fired** (all six pre-registered with thresholds before the run)
+
+**Honest limits, up front:** LoopGain detects *convergence, not correctness* — it knows when more iterations won't help, not whether the answer is right, and it's only as good as the verifier behind your error signal. [The full list of what it can't do →](#what-loopgain-does-and-doesnt-guarantee)
 
 [![PyPI](https://img.shields.io/pypi/v/loopgain.svg)](https://pypi.org/project/loopgain/)
 [![Python](https://img.shields.io/pypi/pyversions/loopgain.svg)](https://pypi.org/project/loopgain/)
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-200%2B_passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-190%2B_passing-brightgreen.svg)](tests/)
 
 **Home:** [loopgain.ai](https://loopgain.ai)
 
 Works for **any iterative AI workflow with a measurable error signal** — verify-revise loops, refinement passes, tool-use retry chains, RAG with self-correction, code-gen with linter feedback, multi-step reasoning loops. **Pre-built adapters for [LangGraph](#langgraph), [CrewAI](#crewai), [AutoGen](#autogen-v04), [LangChain](#langchain), [OpenAI Agents SDK](#openai-agents-sdk), and [Claude Agent SDK](#claude-agent-sdk)**; drop-in via the raw API for any custom stack. Pure Python, no runtime dependencies.
-
-**Keywords:** AI agent loops · agentic AI · infinite loop detection · divergence detection · early stopping · convergence · agent orchestration · LLM stability · generator-verifier-reviser · feedback-loop control.
 
 ---
 
@@ -127,13 +132,34 @@ This transforms divergence detection from "abort with garbage" into "abort with 
 
 ---
 
+## See it across a fleet (optional dashboard)
+
+The library is the whole product locally — telemetry is opt-in and self-hostable. If you want a fleet view of every loop's stability, cost, and rollbacks across a team, there's a hosted dashboard fed by the [telemetry receiver](https://github.com/loopgain-ai/telemetry-receiver):
+
+[![LoopGain dashboard — loop health, convergence, waste, and rollbacks across a fleet](https://loopgain.ai/dashboard-demo.png)](https://dashboard.loopgain.ai/demo)
+
+**[Open the live demo →](https://dashboard.loopgain.ai/demo)** — no signup, real benchmark data.
+
+The receiver and dashboard are both open-source — self-host to keep telemetry entirely under your control.
+
+### Repositories
+
+| Repo | What it is |
+| --- | --- |
+| [**loopgain**](https://github.com/loopgain-ai/loopgain) | This library — the Apache-2.0 control loop (you are here) |
+| [**telemetry-receiver**](https://github.com/loopgain-ai/telemetry-receiver) | Cloudflare Worker that ingests anonymized loop telemetry |
+| [**dashboard**](https://github.com/loopgain-ai/dashboard) | The fleet dashboard — self-hostable |
+| [**loopgain-bench**](https://github.com/loopgain-ai/loopgain-bench) | The reproducible 2,000-trial benchmark behind the numbers above |
+
+---
+
 ## What LoopGain does and doesn't guarantee
 
 LoopGain saves money by stopping a loop once it stops improving — fewer iterations, fewer tokens. In our [public benchmark](https://github.com/loopgain-ai/loopgain-bench), that was a **92.8% median cut in API spend** vs `max_iterations=20`, with output quality preserved. Two honest limits:
 
 - **Savings depend on your workload.** Loops that usually succeed fast save the most (~96%); adversarial, failure-prone loops save less (~78–84%). The headline is a blend — run the benchmark on your own loops before quoting a number.
 - **LoopGain detects convergence, not correctness.** It stops when your error signal stops improving — which means more iterations won't help, *not* that the loop succeeded. On the benchmark this preserved quality (it rarely stopped early on a worse output; false-stop rate ≤4.5%), but a loop can stall with the error still above zero — a plateau at, say, 2 failing tests. So check `result.best_error` (or your own pass/fail) before you trust the output: if it plateaued short of your target, that's a quality gap LoopGain can't see, and a false stop that forces a rerun is the one way it eats into the savings. LoopGain decides *when to stop*; you decide *whether the answer is good enough*.
-- **LoopGain is only as right as your verifier.** It acts on the error signal you give it. If your verifier reports zero errors, LoopGain trusts that and stops — so a verifier with blind spots can report success on an answer that is still wrong, and LoopGain will confidently stop there. This is not the plateau case above: the error reads zero and the loop looks like a clean success, so neither LoopGain nor its convergence signal can flag it. The quality of the stop is bounded by the quality of the check behind your error signal. Pair LoopGain with the strongest verifier you can afford at the stop — executable tests over a sampled subset, a schema or type check over a vibe, a held-out check the loop didn't optimize against.
+- **LoopGain is only as right as your verifier.** It acts on the error signal you give it. If your verifier reports zero errors, LoopGain trusts that and stops — so a verifier with blind spots can report success on an answer that is still wrong, and LoopGain will confidently stop there. This is not the plateau case above: the error reads zero and the loop looks like a clean success, so neither LoopGain nor its convergence signal can flag it. The quality of the stop is bounded by the quality of the check behind your error signal. Pair LoopGain with the strongest verifier you can afford at the stop — executable tests over a sampled subset, a schema or type check over a vibe, a held-out check the loop didn't optimize against. **[How to design a strong verifier](https://loopgain.ai/blog/posts/how-to-design-a-strong-verifier/)** is a field guide to exactly this.
 
 ---
 
@@ -197,7 +223,7 @@ python3 -c "import keyring; keyring.set_password('loopgain', 'telemetry', input(
 # Then in code: keyring.get_password('loopgain', 'telemetry')
 ```
 
-What is sent: state transitions, Aβ summary (min/max/median), gain margin, rollback flag, iterations used, savings, library version, optional opaque `workload_id`, threshold config, hour-bucketed timestamp.
+What is sent: state transitions, Aβ summary (min/max/median), rollback flag, iterations used, savings, library version, optional opaque `workload_id`, threshold config, hour-bucketed timestamp.
 
 **What is NEVER sent: prompts, completions, error contents, output buffer, individual Aβ values, or any customer identity beyond the bearer token.** Privacy contract is enforced by the payload-shape unit tests in `tests/test_telemetry.py`.
 
