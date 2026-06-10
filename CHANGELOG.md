@@ -6,6 +6,15 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-06-09
+
+Documentation-only patch. No library, API, or behaviour change from 0.5.0.
+
+- Synced the PyPI project page with the current GitHub README (the value-first
+  "cost controller" rewrite); the 0.5.0 page predated it.
+- Dropped a stale "gain margin" mention from the telemetry-payload docstring
+  (the field itself was already removed from the payload in 0.5.0 / schema v4).
+
 ## [0.5.0] — 2026-06-09
 
 Removed two derived signals — **ETA prediction** and **gain margin** — that did
