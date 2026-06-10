@@ -2,7 +2,7 @@
 
 Opt-in. Sends a single POST per loop run to a customer-configured endpoint.
 Privacy: only structural statistics — Aβ values, error magnitudes, state
-transitions, gain margin, rollback flag, library version, optional opaque
+transitions, rollback flag, library version, optional opaque
 workload/classification labels. Never sends prompts, completions, error
 contents (the textual content of failures), customer identity beyond the
 bearer token, or best-so-far outputs.
