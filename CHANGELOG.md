@@ -6,6 +6,29 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-06-12
+
+Additive, backward-compatible feature. Default behaviour is byte-identical to
+0.5.2 when the new parameter is left unset.
+
+- **Configurable consecutive-STALLING kill — `LoopGain(stall_terminate_count=…)`.**
+  The trajectory classifier terminates a stalled loop after N *consecutive*
+  STALLING readings. That count was hardcoded to 2; it is now a constructor
+  parameter, default `2`, so existing loops are unchanged. The default is tuned
+  for inner / per-generation loops where a brief plateau is a reliable stop
+  signal. Session-scale / outer loops (e.g. Ralph-style runs where each
+  iteration is a whole agent session) should raise it — a single
+  regression-then-recovery session reads as a transient stall, and the
+  impatient default-2 kill stops too early, discarding a better answer that
+  arrives just after. The 2026-06-11 outer-loop study found that raising the
+  count retained every true catch while roughly halving false stops (consensus
+  best value ≈ 5; the exact session-scale default is not yet statistically
+  pinned — a separate ~1000-run study is pending, so the library ships the
+  conservative inner-loop default and exposes the knob). This is distinct from
+  `TrajectoryThresholds.stall_patience`, which governs STALLING *onset*, not how
+  many consecutive STALLING labels terminate the loop. Ignored under
+  `classifier="legacy_bands"`.
+
 ## [0.5.2] — 2026-06-10
 
 Documentation-only patch. No library, API, or behaviour change from 0.5.1.

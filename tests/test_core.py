@@ -279,6 +279,105 @@ def test_constructor_rejects_zero_max_iterations():
         LoopGain(max_iterations=0)
 
 
+def test_constructor_rejects_zero_stall_terminate_count():
+    with pytest.raises(ValueError):
+        LoopGain(stall_terminate_count=0)
+
+
+# ----- Configurable consecutive-STALLING kill (stall_terminate_count) -----
+
+
+def test_default_stall_terminate_count_is_two_consecutive():
+    """Unset, the loop terminates on exactly 2 consecutive STALLING readings —
+    byte-identical to the historical hardcoded behavior. Constant errors read
+    STALLING from the 2nd observation on, so the kill fires on the 3rd."""
+    lg = LoopGain(target_error=None, max_iterations=None)  # default count=2
+    states = []
+    for i in range(12):
+        if not lg.should_continue():
+            break
+        states.append(lg.observe(50.0, output=f"o{i}"))
+    assert lg.result.outcome == "stalled"
+    assert lg.result.iterations_used == 3  # FAST_CONVERGE, STALLING, STALLING(kill)
+    assert states[-2:] == [STALLING, STALLING]
+
+
+def test_higher_count_requires_that_many_consecutive_stalls():
+    """A higher stall_terminate_count requires that many consecutive STALLING
+    readings before terminal. With constant errors (STALLING from obs 2 on)
+    the kill fires on iteration count+1."""
+    for count in (2, 3, 5, 7):
+        lg = LoopGain(
+            target_error=None, max_iterations=None, stall_terminate_count=count
+        )
+        for i in range(50):
+            if not lg.should_continue():
+                break
+            lg.observe(50.0, output=f"o{i}")
+        assert lg.result.outcome == "stalled"
+        assert lg.result.iterations_used == count + 1, (
+            f"count={count} should kill at iteration {count + 1}, "
+            f"got {lg.result.iterations_used}"
+        )
+
+
+def test_count_one_terminates_on_first_stall():
+    """Edge: count=1 terminates on the first STALLING reading (guards the
+    `[-0:]`-selects-whole-history slice trap)."""
+    lg = LoopGain(target_error=None, max_iterations=None, stall_terminate_count=1)
+    for i in range(12):
+        if not lg.should_continue():
+            break
+        lg.observe(50.0, output=f"o{i}")
+    assert lg.result.outcome == "stalled"
+    assert lg.result.iterations_used == 2  # FAST_CONVERGE, then first STALLING kills
+
+
+def test_higher_count_survives_stall_to_reach_breakthrough():
+    """A flat-then-breakthrough trajectory the default (2) kills mid-plateau —
+    discarding the better answer that arrives just after — must NOT be killed
+    at a higher count: the loop stays alive long enough to see the breakthrough
+    and keep the lower-error output.
+
+    [100, 40×5, 5×2]: the plateau at 40 reads STALLING by obs 4–5; the default
+    kills there (best_error=40). A patient count=5 rides through the transient
+    stall and reaches the breakthrough at error 5."""
+    traj = [100.0, 40.0, 40.0, 40.0, 40.0, 40.0, 5.0, 5.0]
+
+    killed = LoopGain(target_error=None, max_iterations=None)  # default 2
+    for i, e in enumerate(traj):
+        if not killed.should_continue():
+            break
+        killed.observe(e, output=f"o{i}")
+    assert killed.result.outcome == "stalled"
+    assert killed.result.best_error == 40.0  # never saw the breakthrough
+
+    survives = LoopGain(
+        target_error=None, max_iterations=None, stall_terminate_count=5
+    )
+    for i, e in enumerate(traj):
+        if not survives.should_continue():
+            break
+        survives.observe(e, output=f"o{i}")
+    # Not killed by the transient stall; reached the breakthrough and kept it.
+    assert survives.result.best_error == 5.0
+    assert survives.result.iterations_used > killed.result.iterations_used
+
+
+def test_legacy_bands_unaffected_by_stall_terminate_count():
+    """stall_terminate_count is a trajectory-classifier knob; the legacy-bands
+    classifier keeps its own (non-trajectory) termination contract regardless
+    of the count."""
+    lg = LoopGain(
+        max_iterations=20, classifier="legacy_bands", stall_terminate_count=5
+    )
+    for i in range(20):
+        if not lg.should_continue():
+            break
+        lg.observe(50.0, output=f"iter-{i}")  # Aβ=1.0 → OSCILLATING band
+    assert lg.result.outcome == "oscillating"
+
+
 # ----- Custom thresholds -----
 
 

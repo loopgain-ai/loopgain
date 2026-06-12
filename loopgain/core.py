@@ -179,6 +179,25 @@ class LoopGain:
             profile.
         assumed_fixed_cap: Used to compute ``savings_vs_fixed_cap``.
             Default 10 (a generous default agent iteration cap).
+        stall_terminate_count: Number of *consecutive* STALLING readings that
+            terminate the loop (trajectory classifier only). Default ``2``,
+            which is tuned for inner / per-generation loops where a brief
+            plateau is a reliable stop signal. Session-scale / outer loops
+            (e.g. Ralph-style runs where each iteration is a whole agent
+            session) should raise this — a single regression-then-recovery
+            session shows up as a transient stall, and the impatient default-2
+            kill stops too early; the 2026-06-11 outer-loop study showed the
+            consensus best value is around ``5`` (raising the count retained
+            every true catch while roughly halving false stops). The exact
+            session-scale default is not yet statistically pinned (a separate
+            ~1000-run study is pending), so the library ships the conservative
+            inner-loop default and exposes this knob. Must be ``>= 1``; this is
+            distinct from ``TrajectoryThresholds.stall_patience``, which
+            governs STALLING *onset* (how long a plateau must persist before
+            the loop is *labelled* STALLING), not how many consecutive
+            STALLING labels terminate it. Ignored under ``classifier=
+            'legacy_bands'`` (legacy bands keep their non-terminal-STALLING
+            contract).
     """
 
     def __init__(
@@ -190,6 +209,7 @@ class LoopGain:
         classifier: str = "trajectory",
         smoothing_window: int = 3,
         assumed_fixed_cap: int = 10,
+        stall_terminate_count: int = 2,
     ) -> None:
         if smoothing_window < 1:
             raise ValueError("smoothing_window must be >= 1")
@@ -202,6 +222,8 @@ class LoopGain:
                 "classifier must be 'trajectory' or 'legacy_bands'; got "
                 + repr(classifier)
             )
+        if stall_terminate_count < 1:
+            raise ValueError("stall_terminate_count must be >= 1")
 
         self.target_error: Optional[float] = (
             float(target_error) if target_error is not None else None
@@ -212,6 +234,7 @@ class LoopGain:
         self.classifier_kind = classifier
         self.smoothing_window = smoothing_window
         self.assumed_fixed_cap = assumed_fixed_cap
+        self.stall_terminate_count = stall_terminate_count
 
         self._error_history: list[float] = []
         self._gain_history: list[float] = []
@@ -300,18 +323,29 @@ class LoopGain:
             if self._state in (OSCILLATING, DIVERGING):
                 self._terminal = True
 
-            # v0.2 trajectory classifier: STALLING terminates after the v2
-            # protocol's "2+ consecutive stall readings" rule (matches
-            # `component-algebra-v2-protocol-final-4.md` §3.3, which says
-            # "Stalling → Return best-so-far"). Legacy bands keep their
-            # original non-terminal-STALLING contract.
-            if (
-                self.classifier_kind == "trajectory"
-                and self._state == STALLING
-                and len(self._state_history) >= 1
-                and self._state_history[-1] == STALLING
-            ):
-                self._terminal = True
+            # v0.2 trajectory classifier: STALLING terminates after
+            # ``stall_terminate_count`` *consecutive* stall readings (matches
+            # the v2 protocol's "2+ consecutive stall readings" rule by
+            # default — `component-algebra-v2-protocol-final-4.md` §3.3,
+            # "Stalling → Return best-so-far"). The count is configurable so
+            # session-scale / outer loops can be more patient than the
+            # inner-loop default of 2 (see ``stall_terminate_count``). The
+            # current reading is STALLING; the prior ``count - 1`` readings in
+            # ``_state_history`` must also all be STALLING. Indexing by an
+            # explicit offset (not a negative slice) keeps ``count == 1``
+            # correct — ``[-0:]`` would wrongly select the whole history.
+            # Legacy bands keep their original non-terminal-STALLING contract.
+            if self.classifier_kind == "trajectory" and self._state == STALLING:
+                prior_needed = self.stall_terminate_count - 1
+                recent = (
+                    self._state_history[len(self._state_history) - prior_needed:]
+                    if prior_needed > 0
+                    else []
+                )
+                if len(self._state_history) >= prior_needed and all(
+                    s == STALLING for s in recent
+                ):
+                    self._terminal = True
 
             self._state_history.append(self._state)
         else:
@@ -369,9 +403,10 @@ class LoopGain:
         elif self._state == MAX_ITERATIONS:
             outcome = "max_iterations"
         elif self._state == STALLING and self._terminal:
-            # v0.2 trajectory classifier marks STALLING terminal after 2+
-            # consecutive stall readings (v2 protocol §3.3, "Return
-            # best-so-far"). Surfaced as the "stalled" outcome — distinct
+            # v0.2 trajectory classifier marks STALLING terminal after
+            # ``stall_terminate_count`` consecutive stall readings (default 2;
+            # v2 protocol §3.3, "Return best-so-far"). Surfaced as the
+            # "stalled" outcome — distinct
             # from "oscillating" so callers can route on "stuck but not
             # flapping" vs. "actively unstable." Dashboard's bandFromEvent
             # maps "stalled" → STALLING band.
