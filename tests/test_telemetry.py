@@ -6,9 +6,12 @@ robust to network failure, and correct integration with LoopGain state.
 
 from __future__ import annotations
 
+import inspect
 import json
+import re
 import socket
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -794,3 +797,35 @@ def test_is_transient_classification():
     assert _tele._is_transient(_uerr.HTTPError("u", 400, "x", {}, None)) is False
     assert _tele._is_transient(_uerr.HTTPError("u", 401, "x", {}, None)) is False
     assert _tele._is_transient(RuntimeError("x")) is False
+
+
+# ----- README/PyPI doc sync -----
+#
+# The README's documented `send_telemetry` signature is also PyPI's long
+# description (pyproject.toml: readme = "README.md"), baked in at publish
+# time. It has drifted from the real signature twice (fixed in the doc-only
+# 0.5.1 and 0.6.2 releases) because nothing forced the two to stay in sync
+# — a parameter could be added to the function without anyone remembering
+# to update the prose line above it. This test closes that gap: it reads
+# the live signature via reflection and fails if the README's documented
+# one is missing a parameter, so drift breaks `pytest` (already step 2 of
+# every release in the PyPI publish runbook) instead of shipping silently.
+
+
+def test_readme_send_telemetry_signature_matches_real_signature():
+    readme = (Path(__file__).parent.parent / "README.md").read_text()
+    match = re.search(r"lg\.send_telemetry\(([^)]*)\)\s*->\s*bool", readme)
+    assert match, "README is missing the `lg.send_telemetry(...) -> bool` signature line"
+    documented = match.group(1)
+
+    real_params = [
+        name
+        for name in inspect.signature(LoopGain.send_telemetry).parameters
+        if name != "self"
+    ]
+    missing = [p for p in real_params if p not in documented]
+    assert not missing, (
+        f"send_telemetry gained parameter(s) {missing} not reflected in the "
+        "README's documented signature (README.md, the `lg.send_telemetry(...)` "
+        "line) — update the README (and its PyPI-facing prose) before releasing."
+    )
