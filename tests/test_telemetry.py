@@ -535,6 +535,53 @@ def test_send_telemetry_passes_classification_fields(monkeypatch):
     assert body["team"] == "ml-team"
 
 
+def test_payload_includes_actual_dollars_fields_when_provided():
+    lg = _make_terminated_loop()
+    p = build_payload(lg, actual_dollars_spent=1.94, actual_dollars_saved=25.11)
+    assert p["actual_dollars_spent"] == 1.94
+    assert p["actual_dollars_saved"] == 25.11
+
+
+def test_payload_actual_dollars_fields_default_to_none():
+    lg = _make_terminated_loop()
+    p = build_payload(lg)
+    assert p["actual_dollars_spent"] is None
+    assert p["actual_dollars_saved"] is None
+
+
+def test_send_telemetry_passes_actual_dollars_fields(monkeypatch):
+    """LoopGain.send_telemetry plumbs actual_dollars_spent/saved through."""
+
+    class FakeResponse:
+        status = 202
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured["body"] = req.data
+        return FakeResponse()
+
+    monkeypatch.setattr("loopgain.telemetry._open_request", fake_urlopen)
+
+    lg = _make_terminated_loop()
+    ok = lg.send_telemetry(
+        endpoint="https://telemetry.loopgain.ai/v1/aggregate",
+        token="t",
+        actual_dollars_spent=0.42,
+        actual_dollars_saved=3.10,
+    )
+    assert ok is True
+    body = json.loads(captured["body"])
+    assert body["actual_dollars_spent"] == 0.42
+    assert body["actual_dollars_saved"] == 3.10
+
+
 def test_send_telemetry_can_disable_per_iteration(monkeypatch):
     """include_per_iteration=False is plumbed through send_telemetry."""
 

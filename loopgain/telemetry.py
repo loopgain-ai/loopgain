@@ -116,6 +116,8 @@ def build_payload(
     loop_type: Optional[str] = None,
     team: Optional[str] = None,
     include_per_iteration: bool = True,
+    actual_dollars_spent: Optional[float] = None,
+    actual_dollars_saved: Optional[float] = None,
 ) -> dict[str, Any]:
     """Construct the anonymized telemetry payload from a LoopGain instance.
 
@@ -139,6 +141,15 @@ def build_payload(
             the smoothed Aβ trajectory and the error-magnitude trajectory
             (capped at ``PER_ITERATION_CAP`` entries with a ``truncated``
             flag). Set ``False`` to send only aggregate summary stats.
+        actual_dollars_spent: Optional real measured $ cost of this trial,
+            when the caller has actual per-run cost data (e.g. summed
+            token usage x list price). NULL means the dashboard falls back
+            to its iter-count x $/iter extrapolation. Never inferred by
+            the library itself.
+        actual_dollars_saved: Optional real measured $ delta vs. a paired
+            baseline run, when the caller has one (e.g. a fixed-cap
+            comparison trial). Same fallback semantics as
+            ``actual_dollars_spent``.
 
     Returns:
         A JSON-serializable dict matching the v3 telemetry schema.
@@ -174,6 +185,8 @@ def build_payload(
         "framework": framework,
         "loop_type": loop_type,
         "team": team,
+        "actual_dollars_spent": actual_dollars_spent,
+        "actual_dollars_saved": actual_dollars_saved,
         "loop": {
             "outcome": result.outcome,
             "iterations_used": result.iterations_used,

@@ -476,6 +476,8 @@ class LoopGain:
         include_per_iteration: bool = True,
         retries: int = 2,
         retry_backoff: float = 0.25,
+        actual_dollars_spent: Optional[float] = None,
+        actual_dollars_saved: Optional[float] = None,
     ) -> bool:
         """Send anonymized telemetry to a receiver endpoint.
 
@@ -512,6 +514,14 @@ class LoopGain:
                 (bad token, etc.) are never retried.
             retry_backoff: Base seconds between attempts; the nth retry waits
                 ``retry_backoff * n``. Default 0.25.
+            actual_dollars_spent: Optional real measured $ cost of this
+                trial, when the caller has actual per-run cost data (e.g.
+                summed token usage x list price). Omit to let the
+                dashboard fall back to its iter-count x $/iter
+                extrapolation.
+            actual_dollars_saved: Optional real measured $ delta vs. a
+                paired baseline run, when the caller has one. Same
+                fallback semantics as ``actual_dollars_spent``.
 
         Returns:
             ``True`` on 2xx response, ``False`` otherwise.
@@ -538,6 +548,8 @@ class LoopGain:
             loop_type=loop_type,
             team=team,
             include_per_iteration=include_per_iteration,
+            actual_dollars_spent=actual_dollars_spent,
+            actual_dollars_saved=actual_dollars_saved,
         )
         return send_payload(
             endpoint,

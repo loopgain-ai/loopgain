@@ -6,6 +6,23 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-07-07
+
+Additive, backward-compatible feature. Default behaviour is byte-identical to
+0.6.0 when the new parameters are left unset.
+
+- **`send_telemetry(actual_dollars_spent=…, actual_dollars_saved=…)`.**
+  The receiver's `loop_events` table has carried first-class
+  `actual_dollars_spent` / `actual_dollars_saved` columns since v3.1/v3.2
+  (2026-05-25/26) and the dashboard already prefers them over its
+  iter-count x $/iter extrapolation whenever present — but the SDK never
+  exposed a way to populate them, so callers with real per-run cost data
+  (summed token usage x list price, or a measured paired-baseline delta)
+  had no supported path except smuggling numbers into the opaque `team`
+  label. Both are now optional keyword arguments on `send_telemetry()`,
+  threaded straight through `build_payload()`. Omit either (or both) for
+  unchanged behaviour.
+
 ## [0.6.0] — 2026-06-12
 
 Additive, backward-compatible feature. Default behaviour is byte-identical to
