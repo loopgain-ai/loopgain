@@ -193,9 +193,11 @@ Current state name. One of `INIT`, `FAST_CONVERGE`, `CONVERGING`, `STALLING`, `O
 
 Terminal result with `outcome`, `iterations_used`, `best_index`, `best_output`, `best_error`, `convergence_profile`, `error_history`, `savings_vs_fixed_cap`. Safe to call mid-loop.
 
-### `lg.send_telemetry(endpoint, token, workload_id=None, timeout=2.0, allow_insecure=False, framework=None, loop_type=None, team=None, include_per_iteration=True) -> bool`
+### `lg.send_telemetry(endpoint, token, workload_id=None, timeout=2.0, allow_insecure=False, framework=None, loop_type=None, team=None, include_per_iteration=True, retries=2, retry_backoff=0.25, actual_dollars_spent=None, actual_dollars_saved=None) -> bool`
 
 **Opt-in.** Send a single anonymized telemetry POST after the loop terminates. Best-effort — never raises, returns `True` on 2xx, `False` otherwise. Adapters auto-stamp `framework`; `loop_type` and `team` are free-form labels that surface as filters in the dashboard. Pass `include_per_iteration=False` to send aggregate summary only.
+
+`actual_dollars_spent` and `actual_dollars_saved` are optional real-cost fields (v0.6.1+). Populate them only when you have a genuinely *measured* dollar figure — summed real API usage x list price, or an actually-executed paired-baseline comparison run. Never a formula-derived estimate. When populated, the dashboard displays your real number instead of its iter-count x $/iter extrapolation; passing an estimate through this field would present it as ground truth to every consumer of your tenant's data, not just you.
 
 ```python
 import os

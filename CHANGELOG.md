@@ -6,6 +6,25 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.2] — 2026-07-07
+
+Documentation-only patch. No library, API, or behaviour change from 0.6.1.
+
+- **Synced the PyPI page and README to the 0.6.1 `send_telemetry` signature.**
+  `actual_dollars_spent`/`actual_dollars_saved` shipped in code in 0.6.1 but
+  the README's documented signature and the PyPI long description (built
+  from the README at publish time) still showed the pre-0.6.1 parameter
+  list.
+- **Made the measured-only contract explicit in the docstrings and README.**
+  `actual_dollars_spent`/`actual_dollars_saved` must be a genuinely measured
+  quantity — summed real API usage x list price, or an actually-executed
+  paired-baseline run — never a formula-derived estimate. Written down after
+  nearly wiring a chars/4 token-estimate-based counterfactual into
+  `actual_dollars_saved` in a downstream integration; the dashboard trusts
+  these fields as ground truth and stops extrapolating once populated, so an
+  estimate passed through them would silently degrade that guarantee for
+  every consumer, not just the caller.
+
 ## [0.6.1] — 2026-07-07
 
 Additive, backward-compatible feature. Default behaviour is byte-identical to
