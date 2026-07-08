@@ -145,11 +145,19 @@ def build_payload(
             when the caller has actual per-run cost data (e.g. summed
             token usage x list price). NULL means the dashboard falls back
             to its iter-count x $/iter extrapolation. Never inferred by
-            the library itself.
+            the library itself. MUST be a measured quantity — summed
+            real API usage x list price, or an actually-executed
+            comparison run. Never a formula-derived estimate (e.g.
+            char-count / 4 token approximations, or an un-run
+            counterfactual). The dashboard trusts this field as ground
+            truth and stops extrapolating once it's populated; passing
+            an estimate here silently degrades that guarantee for every
+            consumer of the field, not just the caller.
         actual_dollars_saved: Optional real measured $ delta vs. a paired
             baseline run, when the caller has one (e.g. a fixed-cap
-            comparison trial). Same fallback semantics as
-            ``actual_dollars_spent``.
+            comparison trial that was actually executed, not simulated).
+            Same fallback semantics and the same measured-only
+            requirement as ``actual_dollars_spent``.
 
     Returns:
         A JSON-serializable dict matching the v3 telemetry schema.

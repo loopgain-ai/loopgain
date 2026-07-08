@@ -518,9 +518,12 @@ class LoopGain:
                 trial, when the caller has actual per-run cost data (e.g.
                 summed token usage x list price). Omit to let the
                 dashboard fall back to its iter-count x $/iter
-                extrapolation.
+                extrapolation. MUST be measured, never a formula-derived
+                estimate (e.g. char-count-based token approximations) —
+                the dashboard trusts this field as ground truth.
             actual_dollars_saved: Optional real measured $ delta vs. a
-                paired baseline run, when the caller has one. Same
+                paired baseline run that was actually executed, when the
+                caller has one. Same
                 fallback semantics as ``actual_dollars_spent``.
 
         Returns:
