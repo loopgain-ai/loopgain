@@ -38,6 +38,14 @@ pip install loopgain
 
 Pure Python, no dependencies, supports Python 3.10+.
 
+**Using Claude Code?** The [loopgain-plugin](https://github.com/loopgain-ai/loopgain-plugin)
+scans your whole repo for wrappable loops — literal, recursive, graph-cycle, and
+semantic — and proposes reviewed diffs one file at a time (never auto-applied):
+```
+/plugin marketplace add loopgain-ai/loopgain-plugin
+/plugin install loopgain
+```
+
 ---
 
 ## Usage
@@ -150,6 +158,7 @@ The receiver and dashboard are both open-source — self-host to keep telemetry 
 | [**telemetry-receiver**](https://github.com/loopgain-ai/telemetry-receiver) | Cloudflare Worker that ingests anonymized loop telemetry |
 | [**dashboard**](https://github.com/loopgain-ai/dashboard) | The fleet dashboard — self-hostable |
 | [**loopgain-bench**](https://github.com/loopgain-ai/loopgain-bench) | The reproducible 2,000-trial benchmark behind the numbers above |
+| [**loopgain-plugin**](https://github.com/loopgain-ai/loopgain-plugin) | Claude Code plugin — scans a repo for wrappable loops, proposes reviewed diffs |
 
 ---
 
