@@ -465,8 +465,8 @@ class LoopGain:
 
     def send_telemetry(
         self,
-        endpoint: str,
-        token: str,
+        endpoint: Optional[str] = None,
+        token: Optional[str] = None,
         workload_id: Optional[str] = None,
         timeout: float = 2.0,
         allow_insecure: bool = False,
@@ -493,7 +493,11 @@ class LoopGain:
         Args:
             endpoint: Telemetry receiver URL. Must use ``https://``;
                 ``http://`` is rejected unless ``allow_insecure`` is ``True``.
+                Optional — falls back to ``LOOPGAIN_TELEMETRY_ENDPOINT``
+                (either the receiver base URL or the full ``/v1/aggregate``
+                path), so a configured shell needs no arguments at all.
             token: Bearer token issued by the receiver (rotatable).
+                Optional — falls back to ``LOOPGAIN_TELEMETRY_TOKEN``.
             workload_id: Optional opaque label that groups related loops in
                 the dashboard. Never used to identify the customer.
             timeout: Per-request timeout in seconds. Default 2.0.
@@ -542,7 +546,13 @@ class LoopGain:
             ...     loop_type="verify_revise",
             ... )
         """
-        from loopgain.telemetry import build_payload, send_payload
+        from loopgain.telemetry import build_payload, resolve_telemetry_config, send_payload
+
+        resolved = resolve_telemetry_config(endpoint, token)
+        if resolved is None:
+            # Best-effort contract: nothing configured, nothing sent.
+            return False
+        endpoint, token = resolved
 
         payload = build_payload(
             self,

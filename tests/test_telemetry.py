@@ -829,3 +829,64 @@ def test_readme_send_telemetry_signature_matches_real_signature():
         "README's documented signature (README.md, the `lg.send_telemetry(...)` "
         "line) — update the README (and its PyPI-facing prose) before releasing."
     )
+
+
+# ── env-var configuration (2026-07-10) ─────────────────────────────────
+
+
+class TestResolveTelemetryConfig:
+    def test_explicit_args_win(self, monkeypatch):
+        from loopgain.telemetry import resolve_telemetry_config
+
+        monkeypatch.setenv("LOOPGAIN_TELEMETRY_ENDPOINT", "https://env.example")
+        monkeypatch.setenv("LOOPGAIN_TELEMETRY_TOKEN", "lgk_env")
+        out = resolve_telemetry_config("https://arg.example/v1/aggregate", "lgk_arg")
+        assert out == ("https://arg.example/v1/aggregate", "lgk_arg")
+
+    def test_env_fallback_with_base_url(self, monkeypatch):
+        from loopgain.telemetry import resolve_telemetry_config
+
+        monkeypatch.setenv("LOOPGAIN_TELEMETRY_ENDPOINT", "https://telemetry.loopgain.ai")
+        monkeypatch.setenv("LOOPGAIN_TELEMETRY_TOKEN", "lgk_env")
+        out = resolve_telemetry_config(None, None)
+        assert out == ("https://telemetry.loopgain.ai/v1/aggregate", "lgk_env")
+
+    def test_env_fallback_with_full_url_and_trailing_slash(self, monkeypatch):
+        from loopgain.telemetry import resolve_telemetry_config
+
+        monkeypatch.setenv(
+            "LOOPGAIN_TELEMETRY_ENDPOINT", "https://telemetry.loopgain.ai/v1/aggregate/"
+        )
+        monkeypatch.setenv("LOOPGAIN_TELEMETRY_TOKEN", "lgk_env")
+        out = resolve_telemetry_config(None, None)
+        assert out == ("https://telemetry.loopgain.ai/v1/aggregate", "lgk_env")
+
+    def test_missing_either_half_returns_none(self, monkeypatch):
+        from loopgain.telemetry import resolve_telemetry_config
+
+        monkeypatch.delenv("LOOPGAIN_TELEMETRY_ENDPOINT", raising=False)
+        monkeypatch.delenv("LOOPGAIN_TELEMETRY_TOKEN", raising=False)
+        assert resolve_telemetry_config(None, None) is None
+        assert resolve_telemetry_config("https://x.example", None) is None
+        assert resolve_telemetry_config(None, "lgk_x") is None
+
+    def test_send_telemetry_unconfigured_returns_false(self, monkeypatch):
+        from loopgain import LoopGain
+
+        monkeypatch.delenv("LOOPGAIN_TELEMETRY_ENDPOINT", raising=False)
+        monkeypatch.delenv("LOOPGAIN_TELEMETRY_TOKEN", raising=False)
+        lg = LoopGain(target_error=0.1)
+        lg.observe(0.05, "out")
+        assert lg.send_telemetry() is False
+
+
+class TestDoctorCli:
+    def test_doctor_without_config_exits_2(self, monkeypatch, capsys):
+        from loopgain.cli import main
+
+        monkeypatch.delenv("LOOPGAIN_TELEMETRY_ENDPOINT", raising=False)
+        monkeypatch.delenv("LOOPGAIN_TELEMETRY_TOKEN", raising=False)
+        rc = main(["doctor"])
+        assert rc == 2
+        out = capsys.readouterr().out
+        assert "no receiver configured" in out

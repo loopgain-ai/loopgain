@@ -7,4 +7,4 @@ from here so the value never drifts between ``__version__`` and the
 ``pyproject.toml``) for each release.
 """
 
-__version__ = "0.6.2"
+__version__ = "0.6.3"

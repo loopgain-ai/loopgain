@@ -94,6 +94,39 @@ if TYPE_CHECKING:
 # fields are simply ignored.
 SCHEMA_VERSION = 4
 
+# Canonical hosted-receiver ingest path. resolve_telemetry_config() appends
+# it to base-URL endpoints so `LOOPGAIN_TELEMETRY_ENDPOINT` may be either
+# the bare host ("https://telemetry.loopgain.ai") or the full ingest URL.
+AGGREGATE_PATH = "/v1/aggregate"
+
+ENDPOINT_ENV = "LOOPGAIN_TELEMETRY_ENDPOINT"
+TOKEN_ENV = "LOOPGAIN_TELEMETRY_TOKEN"
+
+
+def resolve_telemetry_config(
+    endpoint: Optional[str],
+    token: Optional[str],
+) -> Optional[tuple[str, str]]:
+    """Resolve (endpoint, token), falling back to the environment.
+
+    Explicit arguments win; otherwise ``LOOPGAIN_TELEMETRY_ENDPOINT`` /
+    ``LOOPGAIN_TELEMETRY_TOKEN`` are read, so a configured shell needs a
+    bare ``lg.send_telemetry()`` with no arguments. Endpoints may be the
+    receiver base URL or the full ``/v1/aggregate`` path — both normalize
+    to the ingest URL. Returns ``None`` when either half is missing
+    (send_telemetry stays best-effort and simply reports False).
+    """
+    import os
+
+    ep = (endpoint or os.environ.get(ENDPOINT_ENV) or "").strip()
+    tok = (token or os.environ.get(TOKEN_ENV) or "").strip()
+    if not ep or not tok:
+        return None
+    ep = ep.rstrip("/")
+    if not ep.endswith(AGGREGATE_PATH):
+        ep = ep + AGGREGATE_PATH
+    return ep, tok
+
 
 # Library version sourced from loopgain._version so there's exactly one
 # string to bump per release. _version.py has no project imports, so this

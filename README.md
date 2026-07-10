@@ -202,23 +202,29 @@ Current state name. One of `INIT`, `FAST_CONVERGE`, `CONVERGING`, `STALLING`, `O
 
 Terminal result with `outcome`, `iterations_used`, `best_index`, `best_output`, `best_error`, `convergence_profile`, `error_history`, `savings_vs_fixed_cap`. Safe to call mid-loop.
 
-### `lg.send_telemetry(endpoint, token, workload_id=None, timeout=2.0, allow_insecure=False, framework=None, loop_type=None, team=None, include_per_iteration=True, retries=2, retry_backoff=0.25, actual_dollars_spent=None, actual_dollars_saved=None) -> bool`
+### `lg.send_telemetry(endpoint=None, token=None, workload_id=None, timeout=2.0, allow_insecure=False, framework=None, loop_type=None, team=None, include_per_iteration=True, retries=2, retry_backoff=0.25, actual_dollars_spent=None, actual_dollars_saved=None) -> bool`
 
 **Opt-in.** Send a single anonymized telemetry POST after the loop terminates. Best-effort — never raises, returns `True` on 2xx, `False` otherwise. Adapters auto-stamp `framework`; `loop_type` and `team` are free-form labels that surface as filters in the dashboard. Pass `include_per_iteration=False` to send aggregate summary only.
+
+`endpoint` and `token` are optional (v0.6.3+): with `LOOPGAIN_TELEMETRY_ENDPOINT` and `LOOPGAIN_TELEMETRY_TOKEN` exported, a bare `lg.send_telemetry()` is fully configured — the endpoint may be the receiver base URL (`https://telemetry.loopgain.ai`) or the full `/v1/aggregate` path. Nothing configured → returns `False`, sends nothing.
 
 `actual_dollars_spent` and `actual_dollars_saved` are optional real-cost fields (v0.6.1+). Populate them only when you have a genuinely *measured* dollar figure — summed real API usage x list price, or an actually-executed paired-baseline comparison run. Never a formula-derived estimate. When populated, the dashboard displays your real number instead of its iter-count x $/iter extrapolation; passing an estimate through this field would present it as ground truth to every consumer of your tenant's data, not just you.
 
 ```python
-import os
 from loopgain import LoopGain
 
 lg = LoopGain(target_error=0.1)
 # ... run the loop ...
-lg.send_telemetry(
-    endpoint=os.environ["LOOPGAIN_TELEMETRY_ENDPOINT"],   # or hardcode
-    token=os.environ["LOOPGAIN_TELEMETRY_TOKEN"],         # never hardcode
-    workload_id="my-rag-pipeline",                        # opaque label
-)
+lg.send_telemetry(workload_id="my-rag-pipeline")  # endpoint/token from env (v0.6.3+)
+```
+
+Verify the pipeline before wiring a real loop — `loopgain doctor` runs a tiny in-process loop (no model calls, $0) and sends one test event:
+
+```bash
+export LOOPGAIN_TELEMETRY_ENDPOINT="https://telemetry.loopgain.ai"
+export LOOPGAIN_TELEMETRY_TOKEN="lgk_..."
+loopgain doctor
+# -> event accepted by the receiver -> appears in your dashboard as 'loopgain-doctor'
 ```
 
 Recommended setup: store the token outside source. Two clean options:

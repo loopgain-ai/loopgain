@@ -9,6 +9,7 @@ shell — the transparency half of "opt-in, default-decline":
     loopgain telemetry --disable    # opt out
     loopgain telemetry --reset      # forget instance id + consent
     loopgain version                # print the library version
+    loopgain doctor                 # send one synthetic test event end-to-end
 
 This is intentionally separate from the product telemetry receiver: there is
 no token here and nothing about a customer's loop data.
@@ -70,6 +71,56 @@ def _handle_telemetry(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_doctor(args: "argparse.Namespace") -> int:
+    """Prove the telemetry pipeline end-to-end with ONE synthetic event.
+
+    Runs a tiny in-process verify-revise loop (no model calls, no cost),
+    then sends its telemetry to the configured receiver. If this prints
+    "event accepted", the user's token + endpoint + network path all work
+    and the run appears in their dashboard within one refresh interval.
+    The event is labeled team="doctor" so it is filterable (and excluded
+    from nothing — it is a real, honest test event).
+    """
+    from loopgain import LoopGain
+    from loopgain.telemetry import resolve_telemetry_config
+
+    resolved = resolve_telemetry_config(args.endpoint, args.token)
+    if resolved is None:
+        print("loopgain doctor: no receiver configured.")
+        print("  Set LOOPGAIN_TELEMETRY_ENDPOINT and LOOPGAIN_TELEMETRY_TOKEN,")
+        print("  or pass --endpoint / --token.")
+        print("  Free hosted token: https://loopgain.ai/#pricing (Individual tier).")
+        return 2
+    endpoint, _tok = resolved
+    print(f"loopgain doctor · receiver: {endpoint}")
+
+    print("  1/3 running a synthetic 3-iteration loop (no model calls)…")
+    lg = LoopGain(target_error=0.1, max_iterations=5)
+    for err in (1.0, 0.4, 0.05):
+        if not lg.should_continue():
+            break
+        lg.observe(err, f"synthetic-output-{err}")
+    res = lg.result
+    print(f"      outcome: {res.outcome} · {res.iterations_used} iterations")
+
+    print("  2/3 sending telemetry (one event, team='doctor')…")
+    ok = lg.send_telemetry(
+        endpoint=args.endpoint,
+        token=args.token,
+        workload_id="loopgain-doctor",
+        team="doctor",
+        allow_insecure=bool(args.allow_insecure),
+    )
+    if not ok:
+        print("      ✗ send failed — check the token, endpoint, and network.")
+        print("        (401 → wrong/rotated token · 404 → wrong endpoint path)")
+        return 1
+    print("      ✓ event accepted by the receiver")
+    print("  3/3 done — open your dashboard; the run appears within one refresh:")
+    print("      https://dashboard.loopgain.ai  (Recent runs → loopgain-doctor)")
+    return 0
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="loopgain",
@@ -96,10 +147,31 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     sub.add_parser("version", help="print the library version")
 
+    p_doc = sub.add_parser(
+        "doctor",
+        help="send one synthetic test event to verify your telemetry setup",
+        description=(
+            "Runs a tiny in-process loop (no model calls, $0) and sends its "
+            "telemetry to your receiver, proving token + endpoint + network "
+            "end-to-end. Reads LOOPGAIN_TELEMETRY_ENDPOINT / _TOKEN unless "
+            "--endpoint/--token are given."
+        ),
+    )
+    p_doc.add_argument("--endpoint", default=None, help="receiver base URL or /v1/aggregate URL")
+    p_doc.add_argument("--token", default=None, help="bearer token (lgk_…)")
+    p_doc.add_argument(
+        "--allow-insecure",
+        dest="allow_insecure",
+        action="store_true",
+        help="permit http:// endpoints (local receivers)",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "telemetry":
         return _handle_telemetry(args)
+    if args.command == "doctor":
+        return _handle_doctor(args)
     if args.command == "version":
         print(__version__)
         return 0
