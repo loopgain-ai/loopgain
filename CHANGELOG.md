@@ -6,15 +6,11 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-- **Fixed: funnel `reset()` left in-memory session state behind.** It deleted
-  the state file and cleared the resolved consent mode, but kept the queued
-  events, the adapter name, and the outcome counts gathered under the instance
-  id it had just forgotten. In a process that kept using the same `Funnel`
-  after a reset, an unsent event could still be POSTed under the deleted id,
-  and the session summary at exit reported an adapter and outcome counts the
-  *new* instance id never produced. `reset()` now clears all three. The CLI
-  path (`loopgain telemetry --reset`) was never affected — it builds a fresh
-  `Funnel` whose accumulators are already empty.
+## [0.6.4] — 2026-07-26
+
+Two fixes in the opt-in funnel telemetry. No API change, no behaviour change
+for any loop that does not use `Funnel` directly. Telemetry stays opt-in and
+the opt-out is unchanged.
 
 - **Fixed: funnel `note_outcome()` / `note_adapter()` dropped their record
   when called before any other funnel hook.**
@@ -28,6 +24,37 @@ and versions follow [Semantic Versioning](https://semver.org/).
   run first, and no user telemetry was lost. Direct `Funnel` use and reuse of
   an instance after `reset()` did hit it. The opt-out is unchanged — when
   telemetry is declined the hooks still record nothing and touch no disk.
+
+- **Fixed: funnel `reset()` left in-memory session state behind.** It deleted
+  the state file and cleared the resolved consent mode, but kept the queued
+  events, the adapter name, and the outcome counts gathered under the instance
+  id it had just forgotten. In a process that kept using the same `Funnel`
+  after a reset, an unsent event could still be POSTed under the deleted id,
+  and the session summary at exit reported an adapter and outcome counts the
+  *new* instance id never produced. `reset()` now clears all three. The CLI
+  path (`loopgain telemetry --reset`) was never affected — it builds a fresh
+  `Funnel` whose accumulators are already empty.
+
+## [0.6.3] — 2026-07-10
+
+Setup automation for users who install the library without the Claude Code
+plugin. Additive and backward-compatible — behaviour is unchanged when the
+new env vars are unset and the new subcommand is not run. *(Entry written
+retroactively on 2026-07-26 from commit `2ee73af`; 0.6.3 shipped to PyPI
+without a changelog entry.)*
+
+- **`send_telemetry(endpoint=None, token=None)` — both arguments are now
+  optional.** They fall back to `LOOPGAIN_TELEMETRY_ENDPOINT` and
+  `LOOPGAIN_TELEMETRY_TOKEN`, so a configured shell needs only a bare
+  `lg.send_telemetry()`. The endpoint accepts either the receiver base URL or
+  the full `/v1/aggregate` path. With nothing configured the call returns
+  `False` and sends nothing — the best-effort contract is unchanged.
+- **New `loopgain doctor` subcommand.** Runs a 3-iteration in-process loop (no
+  model calls, $0) and sends one test event, proving token + endpoint +
+  network end-to-end before a real loop is wired up. Exits `2` with setup
+  pointers when nothing is configured.
+- **README:** env-var setup is now the primary telemetry example, and
+  `doctor` is documented.
 
 ## [0.6.2] — 2026-07-07
 
