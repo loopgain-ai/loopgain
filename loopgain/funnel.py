@@ -490,7 +490,19 @@ class Funnel:
             self._write_state_file()
 
     def reset(self) -> None:
-        """Forget the instance id and consent (regenerated on next opt-in)."""
+        """Forget the instance id and consent (regenerated on next opt-in).
+
+        Everything tied to the forgotten identity goes with it: the state
+        file, the lazily-resolved consent mode, and the in-memory session
+        record (queued events, adapter, outcome counts). Otherwise a reused
+        instance carries pre-reset activity across the boundary and attributes
+        it to the *next* instance id — the session summary at exit would
+        report an adapter and outcome counts the new identity never produced.
+
+        Deliberately kept: the flush thread, its stop event, and the
+        ``atexit`` registration. Those are process machinery, not identity,
+        and re-registering the exit hook would run it twice.
+        """
         with self._lock:
             try:
                 if os.path.exists(self._state_path):
@@ -500,6 +512,10 @@ class Funnel:
             self._state = {}
             self._loaded = False
             self._mode = None
+            self._queue = []
+            self._session_started = False
+            self._adapter = None
+            self._outcomes = {}
 
     def status(self) -> dict[str, Any]:
         """A snapshot for ``loopgain telemetry --show``. Reads, never sends."""

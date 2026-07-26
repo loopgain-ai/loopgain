@@ -387,6 +387,55 @@ def test_reset_forgets_state(tmp_path, monkeypatch):
     assert not os.path.exists(os.path.join(str(tmp_path), "funnel.json"))
 
 
+def test_reset_drops_events_queued_under_the_old_instance_id(tmp_path, monkeypatch):
+    """A "forget me" must not leave the deleted id sitting in the send queue.
+
+    Every queued event carries ``instance_id``. If reset() only removed the
+    state file, an unsent first_init would still be POSTed under the id the
+    user just asked us to forget.
+    """
+    cap = _Capture()
+    f = _enabled(tmp_path, monkeypatch, cap)
+    f.on_init()
+    assert f._queue, "precondition: on_init queued a first_init event"
+    f.reset()
+    assert f.flush_now() is False
+    assert cap.batches == []
+
+
+def test_reset_clears_session_accumulators(tmp_path, monkeypatch):
+    """Adapter + outcome counts belong to the forgotten identity.
+
+    Reusing the instance after reset() used to carry them across the boundary,
+    so the next session summary reported activity the new instance id never
+    produced.
+    """
+    cap = _Capture()
+    f = _enabled(tmp_path, monkeypatch, cap)
+    f.on_init()
+    f.note_adapter("langgraph")
+    f.note_outcome("DIVERGING")
+    old_id = f._state["instance_id"]
+
+    f.reset()
+    assert f._adapter is None
+    assert f._outcomes == {}
+    assert f._session_started is False
+
+    # Second life: same object, fresh identity, no inherited activity.
+    f.on_init()
+    f.note_outcome("TARGET_MET")
+    f._emit_session_summary()
+    f.flush_now()
+
+    session = [e for e in cap.events if e["event"] == "session"]
+    assert len(session) == 1
+    assert session[0]["instance_id"] != old_id
+    assert session[0]["adapter"] is None
+    assert session[0]["outcomes"] == {"converged": 1}
+    assert session[0]["session_seq"] == 1  # counter restarted with the new id
+
+
 def test_cli_enable_disable_show(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("LOOPGAIN_CONFIG_DIR", str(tmp_path))
     monkeypatch.delenv("LOOPGAIN_TELEMETRY", raising=False)
