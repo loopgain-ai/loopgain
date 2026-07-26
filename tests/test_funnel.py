@@ -219,6 +219,54 @@ def test_session_summary_carries_outcomes_and_adapter(tmp_path, monkeypatch):
     assert s["outcomes"] == {"diverged": 2, "converged": 1, "other": 1}
 
 
+def test_note_hooks_record_before_on_init(tmp_path, monkeypatch):
+    """note_adapter/note_outcome resolve consent themselves (GH #1).
+
+    ``_mode`` is None until ``_ensure_loaded()`` runs. A hook that gated on a
+    bare ``self._mode`` read silently dropped its record whenever it happened
+    to run before ``on_init()``/``on_first_observe()``."""
+    cap = _Capture()
+    f = _enabled(tmp_path, monkeypatch, cap)
+    # Deliberately no on_init() first — these are the first calls into f.
+    f.note_adapter("langgraph")
+    f.note_outcome("TARGET_MET")
+    f.on_init()
+    f._emit_session_summary()
+    f.flush_now()
+    session = [e for e in cap.events if e["event"] == "session"]
+    assert len(session) == 1
+    assert session[0]["adapter"] == "langgraph"
+    assert session[0]["outcomes"] == {"converged": 1}
+
+
+def test_note_hooks_record_nothing_when_disabled(tmp_path, monkeypatch):
+    """Resolving consent inside the note hooks must not weaken the opt-out:
+    when declined they still record nothing and touch no disk."""
+    monkeypatch.setenv("LOOPGAIN_TELEMETRY", "0")
+    monkeypatch.delenv("DO_NOT_TRACK", raising=False)
+    cap = _Capture()
+    f = _funnel(tmp_path, cap)
+    f.note_adapter("langgraph")
+    f.note_outcome("DIVERGING")
+    assert f._adapter is None
+    assert f._outcomes == {}
+    assert not os.path.exists(os.path.join(str(tmp_path), "funnel.json"))
+
+
+def test_note_adapter_ignores_empty_name(tmp_path, monkeypatch):
+    """A falsy adapter name is a no-op — and must not resolve consent, so it
+    can't materialize a state file or trigger the notice as a side effect."""
+    monkeypatch.delenv("LOOPGAIN_TELEMETRY", raising=False)
+    monkeypatch.delenv("DO_NOT_TRACK", raising=False)
+    for k in ("CI", "CONTINUOUS_INTEGRATION", "GITHUB_ACTIONS", "GITLAB_CI"):
+        monkeypatch.delenv(k, raising=False)
+    f = _funnel(tmp_path, _Capture())
+    f.note_adapter(None)
+    f.note_adapter("")
+    assert f._adapter is None
+    assert not os.path.exists(os.path.join(str(tmp_path), "funnel.json"))
+
+
 # ----- Privacy contract -----
 
 

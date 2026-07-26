@@ -428,6 +428,11 @@ class Funnel:
         self._enqueue(event)
 
     # ----- Public hooks (called from core / adapters) -----
+    #
+    # Each hook resolves consent through ``_ensure_loaded()`` rather than
+    # reading ``self._mode`` directly. Mode is resolved lazily and stays
+    # ``None`` until the first hook runs, so a bare comparison drops the record
+    # whenever a hook happens to be the first one called. See GH #1.
 
     def on_init(self) -> None:
         """A ``LoopGain`` was constructed. Records first_init once per install."""
@@ -457,7 +462,7 @@ class Funnel:
 
     def note_outcome(self, state: str) -> None:
         """Record a terminal loop state into the coarse outcome distribution."""
-        if self._mode != _ENABLED:
+        if self._ensure_loaded() != _ENABLED:
             return
         bucket = _STATE_TO_OUTCOME.get(state, "other")
         with self._lock:
@@ -465,7 +470,8 @@ class Funnel:
 
     def note_adapter(self, name: Optional[str]) -> None:
         """Record which framework adapter is driving the loop."""
-        if self._mode != _ENABLED or not name:
+        # Falsy name first: a no-op call must not materialize consent state.
+        if not name or self._ensure_loaded() != _ENABLED:
             return
         self._adapter = str(name)
 

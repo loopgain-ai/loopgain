@@ -6,6 +6,19 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- **Fixed: funnel `note_outcome()` / `note_adapter()` dropped their record
+  when called before any other funnel hook.**
+  ([#1](https://github.com/loopgain-ai/loopgain/issues/1), reported by
+  @Elshayib.) Both gated on a bare `self._mode` read, but the consent mode is
+  resolved lazily and stays `None` until `_ensure_loaded()` runs — so either
+  hook firing first returned early even with telemetry explicitly enabled.
+  They now resolve consent themselves, the way `on_init()` and
+  `on_first_observe()` already did. No shipped code path reached this: every
+  adapter takes an already-constructed `LoopGain`, so `on_init()` had always
+  run first, and no user telemetry was lost. Direct `Funnel` use and reuse of
+  an instance after `reset()` did hit it. The opt-out is unchanged — when
+  telemetry is declined the hooks still record nothing and touch no disk.
+
 ## [0.6.2] — 2026-07-07
 
 Documentation-only patch. No library, API, or behaviour change from 0.6.1.
