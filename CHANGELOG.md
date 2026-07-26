@@ -6,6 +6,16 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- **Fixed: funnel `reset()` left in-memory session state behind.** It deleted
+  the state file and cleared the resolved consent mode, but kept the queued
+  events, the adapter name, and the outcome counts gathered under the instance
+  id it had just forgotten. In a process that kept using the same `Funnel`
+  after a reset, an unsent event could still be POSTed under the deleted id,
+  and the session summary at exit reported an adapter and outcome counts the
+  *new* instance id never produced. `reset()` now clears all three. The CLI
+  path (`loopgain telemetry --reset`) was never affected — it builds a fresh
+  `Funnel` whose accumulators are already empty.
+
 - **Fixed: funnel `note_outcome()` / `note_adapter()` dropped their record
   when called before any other funnel hook.**
   ([#1](https://github.com/loopgain-ai/loopgain/issues/1), reported by
