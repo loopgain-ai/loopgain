@@ -79,10 +79,7 @@ Issues = "https://github.com/loopgain-ai/loopgain/issues"
 loopgain = "loopgain.cli:main"
 
 [project.optional-dependencies]
-test = [
-    "pytest>=7.0",
-    "agentrunproof>=0.1.2,<0.2",
-]
+test = ["pytest>=7.0"]
 # Framework adapter extras. Install with e.g. `pip install loopgain[langgraph]`.
 # Versions are floors only — any reasonably recent release should work since
 # the adapters duck-type the framework's public stream/callback surface.

@@ -8,8 +8,8 @@ Skipped automatically if `agents` (the import surface of the
 
 The Agents SDK is fundamentally async-streaming. Most adapter-level
 tests below use a tiny ``RunResultStreaming`` lookalike so they can
-control every event. One test also uses AgentRunProof's deterministic
-public-``Model`` implementation to exercise the real ``Runner`` fully
+control every event. One test also uses the SDK's public
+``agents.testing.ScriptedModel`` to exercise the real ``Runner`` fully
 offline, without an API key or model call.
 """
 
@@ -68,14 +68,14 @@ def _error_from_event(event) -> float | None:
 
 
 def test_openai_agents_adapter_drives_real_runner_offline():
-    """Exercise the real Runner with a deterministic public Model.
+    """Exercise the real Runner with the SDK's deterministic test model.
 
     The first scripted response requests a real function tool. LoopGain
     observes its output, converges, and cancels before the second scripted
     response is consumed.
     """
 
-    agentrunproof = pytest.importorskip("agentrunproof")
+    testing = pytest.importorskip("agents.testing")
     from agents import Agent, RunConfig, function_tool
 
     tool_calls = 0
@@ -86,14 +86,14 @@ def test_openai_agents_adapter_drives_real_runner_offline():
         tool_calls += 1
         return "0.0"
 
-    model = agentrunproof.DeterministicModel(
+    model = testing.ScriptedModel(
         [
             [
-                agentrunproof.function_call(
+                testing.function_call(
                     "measure_error", {}, call_id="loopgain-measurement"
                 )
             ],
-            [agentrunproof.assistant_message("done")],
+            [testing.assistant_message("done")],
         ]
     )
     agent = Agent(
