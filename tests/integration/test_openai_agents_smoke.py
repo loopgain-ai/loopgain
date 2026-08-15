@@ -6,14 +6,11 @@ Skipped automatically if `agents` (the import surface of the
     pip install 'loopgain[openai-agents]'
     pytest tests/integration -m integration
 
-The Agents SDK is fundamentally async-streaming and requires either a
-real OpenAI key or an internal ``Runner`` fake to exercise the streaming
-path. We don't want this test to require network or API budget, so we
-construct a tiny ``RunResultStreaming`` lookalike that emits a sequence
-of ``StreamEvent``-shaped objects via an async generator, then drive
-the adapter against it. The framework import gate above still ensures
-the test runs only when the SDK is installed (so any unconditional
-top-level import drift in the adapter would surface here).
+The Agents SDK is fundamentally async-streaming. Most adapter-level
+tests below use a tiny ``RunResultStreaming`` lookalike so they can
+control every event. One test also uses the SDK's public
+``agents.testing.ScriptedModel`` to exercise the real ``Runner`` fully
+offline, without an API key or model call.
 """
 
 from __future__ import annotations
@@ -68,6 +65,79 @@ def _error_from_event(event) -> float | None:
     """Adapter's error_fn: pull the magnitude attached to events we
     care about. Returns None to skip events without a magnitude."""
     return event.magnitude
+
+
+def test_openai_agents_adapter_drives_real_runner_offline(monkeypatch):
+    """Exercise the real Runner with the SDK's deterministic test model.
+
+    The first scripted response requests a real function tool. LoopGain
+    observes its output, converges, and cancels before the second scripted
+    response is consumed.
+    """
+
+    testing = pytest.importorskip("agents.testing")
+    from agents import Agent, RunConfig, function_tool
+    from agents.result import RunResultStreaming
+
+    tool_calls = 0
+    cancel_calls = 0
+
+    original_cancel = RunResultStreaming.cancel
+
+    def track_cancel(self, mode="immediate"):
+        nonlocal cancel_calls
+        cancel_calls += 1
+        return original_cancel(self, mode)
+
+    monkeypatch.setattr(RunResultStreaming, "cancel", track_cancel)
+
+    @function_tool
+    def measure_error() -> str:
+        nonlocal tool_calls
+        tool_calls += 1
+        return "0.0"
+
+    model = testing.ScriptedModel(
+        [
+            [
+                testing.function_call(
+                    "measure_error", {}, call_id="loopgain-measurement"
+                )
+            ],
+            [testing.assistant_message("done")],
+        ]
+    )
+    agent = Agent(
+        name="LoopGain offline smoke",
+        instructions="Call measure_error once, then finish.",
+        tools=[measure_error],
+        model=model,
+    )
+
+    def error_from_real_event(event) -> float | None:
+        item = getattr(event, "item", None)
+        if getattr(item, "type", None) == "tool_call_output_item":
+            return float(item.output)
+        return None
+
+    async def main():
+        lg = LoopGain(target_error=0.0, max_iterations=20)
+        adapter = OpenAIAgentsAdapter(lg=lg, error_fn=error_from_real_event)
+        result = await adapter.run(
+            agent=agent,
+            input="Measure the current error.",
+            run_config=RunConfig(tracing_disabled=True),
+        )
+        return lg, result
+
+    lg, result = asyncio.run(main())
+
+    assert lg.result.outcome == "converged"
+    assert lg.result.iterations_used == 1
+    assert tool_calls == 1
+    assert cancel_calls == 1
+    assert model.remaining_steps == 1
+    assert result.final_output is None
 
 
 def test_openai_agents_adapter_drives_fake_result_to_convergence(monkeypatch):
