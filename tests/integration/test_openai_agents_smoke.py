@@ -67,7 +67,7 @@ def _error_from_event(event) -> float | None:
     return event.magnitude
 
 
-def test_openai_agents_adapter_drives_real_runner_offline():
+def test_openai_agents_adapter_drives_real_runner_offline(monkeypatch):
     """Exercise the real Runner with the SDK's deterministic test model.
 
     The first scripted response requests a real function tool. LoopGain
@@ -77,8 +77,19 @@ def test_openai_agents_adapter_drives_real_runner_offline():
 
     testing = pytest.importorskip("agents.testing")
     from agents import Agent, RunConfig, function_tool
+    from agents.result import RunResultStreaming
 
     tool_calls = 0
+    cancel_calls = 0
+
+    original_cancel = RunResultStreaming.cancel
+
+    def track_cancel(self, mode="immediate"):
+        nonlocal cancel_calls
+        cancel_calls += 1
+        return original_cancel(self, mode)
+
+    monkeypatch.setattr(RunResultStreaming, "cancel", track_cancel)
 
     @function_tool
     def measure_error() -> str:
@@ -124,6 +135,7 @@ def test_openai_agents_adapter_drives_real_runner_offline():
     assert lg.result.outcome == "converged"
     assert lg.result.iterations_used == 1
     assert tool_calls == 1
+    assert cancel_calls == 1
     assert model.remaining_steps == 1
     assert result.final_output is None
 
