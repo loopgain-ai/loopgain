@@ -85,7 +85,7 @@ dev = [
     "build>=1.2,<2",
     "pytest>=7,<10",
     "ruff>=0.11,<1",
-    "twine>=5,<7",
+    "twine>=5,<8",
 ]
 # Framework adapter extras. Install with e.g. `pip install loopgain[langgraph]`.
 # Versions are floors only — any reasonably recent release should work since
