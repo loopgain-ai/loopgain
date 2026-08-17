@@ -21,7 +21,8 @@ import loopgain.funnel as funnel_mod
 from loopgain.funnel import Funnel
 
 
-FIXED_CLOCK = lambda: datetime(2026, 5, 30, 9, 37, 12, 500, tzinfo=timezone.utc)
+def FIXED_CLOCK():
+    return datetime(2026, 5, 30, 9, 37, 12, 500, tzinfo=timezone.utc)
 
 
 class _Capture:

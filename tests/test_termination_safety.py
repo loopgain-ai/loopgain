@@ -21,7 +21,6 @@ the bug was a *liveness* failure — the loop never returned to hand it back.
 
 from __future__ import annotations
 
-import pytest
 
 from loopgain import CONVERGING, FAST_CONVERGE, LoopGain, classify_trajectory
 

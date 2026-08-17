@@ -24,7 +24,6 @@ from loopgain import funnel
 from loopgain.classifier import (
     TrajectoryThresholds,
     classify_trajectory,
-    extract_features,
 )
 
 

@@ -10,9 +10,7 @@ the same bug, but louder.
 
 from __future__ import annotations
 
-import math
 
-import pytest
 
 from loopgain import (
     LoopGain,
@@ -280,7 +278,7 @@ def test_observe_rejects_string():
     lg = LoopGain()
     # We choose to accept strings (len semantics) but it's an unexpected path.
     # If we ever tighten this, update the test.
-    state = lg.observe("abc")  # len("abc") = 3
+    lg.observe("abc")  # len("abc") = 3
     assert lg.result.error_history[0] == 3.0
 
 

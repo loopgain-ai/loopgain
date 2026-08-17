@@ -28,7 +28,6 @@ from loopgain import (
     FAST_CONVERGE,
     OSCILLATING,
     STALLING,
-    TrajectoryFeatures,
     TrajectoryThresholds,
     classify_trajectory,
     extract_features,
