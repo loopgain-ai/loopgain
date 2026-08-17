@@ -9,13 +9,15 @@ from __future__ import annotations
 import inspect
 import json
 import re
-import socket
+import socket as _socket
+import urllib.error as _uerr
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
-from loopgain import LoopGain, build_telemetry_payload
+from loopgain import telemetry as _tele
+from loopgain import LoopGain
 from loopgain.telemetry import (
     SCHEMA_VERSION,
     LIBRARY_VERSION,
@@ -686,11 +688,6 @@ def test_send_payload_refuses_redirects():
 
 
 # ----- send_payload retry behavior (transient failures) -----
-
-import socket as _socket
-import urllib.error as _uerr
-
-from loopgain import telemetry as _tele
 
 
 class _OkResp:

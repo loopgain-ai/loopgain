@@ -31,6 +31,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlparse
 
+from loopgain._version import __version__ as LIBRARY_VERSION
+
 
 def _safe_float(x: Any) -> Any:
     """Coerce inf / -inf / NaN to None so the payload stays strict JSON.
@@ -127,11 +129,6 @@ def resolve_telemetry_config(
         ep = ep + AGGREGATE_PATH
     return ep, tok
 
-
-# Library version sourced from loopgain._version so there's exactly one
-# string to bump per release. _version.py has no project imports, so this
-# is safe to import at module load.
-from loopgain._version import __version__ as LIBRARY_VERSION
 
 # Cap on per-iteration trajectory length sent to telemetry. Loops longer than
 # this are truncated to the first PER_ITERATION_CAP entries with a

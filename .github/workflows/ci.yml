@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install package and test dependencies
+        run: python -m pip install --disable-pip-version-check ".[test]"
+      - name: Run test suite
+        run: python -m pytest -q
+
+  framework-integrations:
+    name: Integration (${{ matrix.framework }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - framework: langgraph
+            extra: langgraph
+            test-file: tests/integration/test_langgraph_smoke.py
+          - framework: crewai
+            extra: crewai
+            test-file: tests/integration/test_crewai_smoke.py
+          - framework: autogen
+            extra: autogen
+            test-file: tests/integration/test_autogen_smoke.py
+          - framework: langchain
+            extra: langchain
+            test-file: tests/integration/test_langchain_smoke.py
+          - framework: openai-agents
+            extra: openai-agents
+            test-file: tests/integration/test_openai_agents_smoke.py
+          - framework: claude-agent-sdk
+            extra: claude-agent-sdk
+            test-file: tests/integration/test_claude_agent_sdk_smoke.py
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install framework integration
+        run: python -m pip install --disable-pip-version-check ".[test,${{ matrix.extra }}]"
+      - name: Run real-framework offline smoke test
+        run: |
+          results_file="$(mktemp)"
+          python -m pytest -q "${{ matrix.test-file }}" -m integration --junitxml="$results_file"
+          python - "$results_file" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          suites = ET.parse(sys.argv[1]).getroot().findall(".//testsuite")
+          executed = sum(int(suite.get("tests", "0")) for suite in suites)
+          skipped = sum(int(suite.get("skipped", "0")) for suite in suites)
+          if executed == 0 or skipped:
+              raise SystemExit(
+                  f"integration gate requires executed tests with zero skips; "
+                  f"executed={executed}, skipped={skipped}"
+              )
+          PY
+
+  quality-and-package:
+    name: Lint, security, and package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install quality and packaging tools
+        run: python -m pip install --disable-pip-version-check ".[dev]"
+      - name: Lint source and tests
+        run: python -m ruff check loopgain tests
+      - name: Scan application source for security issues
+        run: python -m bandit -q -r loopgain -c pyproject.toml -ll
+      - name: Build source and wheel distributions
+        run: python -m build
+      - name: Validate package metadata
+        run: python -m twine check dist/*
+      - name: Smoke-test the built wheel
+        run: |
+          smoke_venv="$(mktemp -d)/venv"
+          python -m venv "$smoke_venv"
+          "$smoke_venv/bin/python" -m pip install --disable-pip-version-check dist/*.whl
+          cd /tmp
+          "$smoke_venv/bin/python" -c "import loopgain; print(loopgain.__version__)"
+          "$smoke_venv/bin/loopgain" --help

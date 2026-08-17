@@ -7,7 +7,6 @@ and best-so-far buffer correctness.
 
 from __future__ import annotations
 
-import math
 
 import pytest
 
