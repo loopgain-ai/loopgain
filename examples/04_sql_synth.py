@@ -4,8 +4,8 @@ Real verify-revise loop. SQLite is the verifier:
   1. Claude is given a natural-language query against a small in-memory
      schema (employees, departments).
   2. Claude returns a single SELECT statement.
-  3. We refuse anything that isn't a single SELECT, execute it against
-     the fixture, and compare its result set to the expected set.
+  3. SQLite permits only read operations for the candidate. We execute it
+     against the fixture and compare its result set to the expected set.
   4. Error = size of the symmetric difference of result rows. 0 fires
      TARGET_MET.
 
@@ -80,6 +80,15 @@ def extract_sql(text: str) -> str:
     return (fence.group(1) if fence else text).strip().rstrip(";").strip()
 
 
+def _readonly_authorizer(action, _arg1, arg2, _database, _source):
+    """Permit reads only; statement prefixes are not a security boundary."""
+    if action == sqlite3.SQLITE_FUNCTION:
+        return sqlite3.SQLITE_DENY if arg2.lower() == "load_extension" else sqlite3.SQLITE_OK
+    if action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ, sqlite3.SQLITE_RECURSIVE):
+        return sqlite3.SQLITE_OK
+    return sqlite3.SQLITE_DENY
+
+
 def run_query(conn: sqlite3.Connection, sql: str):
     if not sql:
         return len(EXPECTED) + 1, "empty query"
@@ -88,6 +97,7 @@ def run_query(conn: sqlite3.Connection, sql: str):
     if ";" in sql:
         return len(EXPECTED) + 1, "multi-statement input rejected"
     try:
+        conn.set_authorizer(_readonly_authorizer)
         rows = conn.execute(sql).fetchall()
     except sqlite3.Error as exc:
         return len(EXPECTED) + 1, f"sql error: {exc}"
@@ -143,6 +153,7 @@ def main() -> None:
     client = get_client()
     conn = sqlite3.connect(":memory:")
     conn.executescript(SCHEMA)
+    conn.execute("PRAGMA query_only=ON")
     print("Spec: top-2-per-department over an 8-row fixture.\n")
     baseline_err, baseline_iters = baseline_run(client, conn)
     lg = loopgain_run(client, conn)
