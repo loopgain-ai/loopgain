@@ -391,9 +391,9 @@ class Funnel:
         otherwise (including when there was nothing to send).
         """
         with self._lock:
-            if not self._queue:
-                return False
             if self._ensure_loaded() != _ENABLED:
+                return False
+            if not self._queue:
                 return False
             pending = self._queue
             self._queue = []

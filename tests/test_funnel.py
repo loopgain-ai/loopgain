@@ -527,3 +527,26 @@ def test_reenable_never_sends_activity_discarded_on_decline(tmp_path, monkeypatc
     session = next(event for event in cap.events if event["event"] == "session")
     assert session["adapter"] is None
     assert "outcomes" not in session
+
+
+def test_empty_flush_discards_session_activity_on_external_opt_out(tmp_path, monkeypatch):
+    monkeypatch.delenv("LOOPGAIN_TELEMETRY", raising=False)
+    monkeypatch.delenv("DO_NOT_TRACK", raising=False)
+    cap = _Capture()
+    cli = _funnel(tmp_path, cap)
+    cli.set_consent(True)
+    running = _funnel(tmp_path, cap)
+    running.on_init()
+    assert running.flush_now() is True
+    running.note_adapter("before-decline")
+    running.note_outcome("DIVERGING")
+    assert running._queue == []
+
+    cli.set_consent(False)
+    assert running.flush_now() is False
+    cli.set_consent(True)
+    running._on_exit()
+
+    session = next(event for event in cap.events if event["event"] == "session")
+    assert session["adapter"] is None
+    assert "outcomes" not in session
