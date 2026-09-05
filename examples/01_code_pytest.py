@@ -17,6 +17,7 @@ Expected band:  FAST_CONVERGE → TARGET_MET on a solvable problem.
 Loop type:      verify_revise.
 
 Run:
+    # First prepare the trusted pytest image described in examples/README.md.
     pip install 'loopgain[examples]'
     python examples/01_code_pytest.py
 """
@@ -24,12 +25,11 @@ Run:
 from __future__ import annotations
 
 import re
-import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
 from loopgain import LoopGain
+from _sandbox import SandboxExecutionError, ensure_available, execute_pytest
 
 from _common import (
     call_claude,
@@ -99,14 +99,16 @@ def strip_code_fences(text: str) -> str:
 
 
 def run_pytest(workdir: Path) -> tuple[int, str]:
-    proc = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", "--tb=short", "--no-header"],
-        cwd=workdir, capture_output=True, text=True, timeout=30,
-    )
-    out = proc.stdout + proc.stderr
+    try:
+        returncode, out = execute_pytest(
+            (workdir / "solution.py").read_text(),
+            (workdir / "test_solution.py").read_text(),
+        )
+    except SandboxExecutionError as exc:
+        return 15, f"Sandbox candidate failure: {exc}"
     m = re.search(r"(\d+)\s+failed", out)
     failures = int(m.group(1)) if m else 0
-    if proc.returncode != 0 and failures == 0:
+    if returncode != 0 and failures == 0:
         failures = 15  # collection/import error → worst-case signal
     return failures, out
 
@@ -121,6 +123,7 @@ def one_iteration(client, workdir: Path, prev_code: str, prev_failures: str):
             f"\n\npytest reported these failures:\n```\n{prev_failures[-1500:]}\n```"
             f"\n\nReturn a fully corrected `solution.py`. Code only, no prose."
         )
+    ensure_available()  # Fail before spending on a candidate that cannot be isolated.
     code = strip_code_fences(call_claude(client, prompt))
     if not code:
         return 15, "", ""
@@ -154,17 +157,19 @@ def loopgain_run(client, workdir: Path):
 
 
 def main() -> None:
+    ensure_available()
     client = get_client()
-    workdir = Path(tempfile.mkdtemp(prefix="loopgain-ex01-"))
-    (workdir / "test_solution.py").write_text(TESTS)
-    print(f"Workdir: {workdir}")
-    print(f"Spec:    format_duration — 15 parametrized test cases.\n")
-
-    baseline_err, baseline_iters = baseline_run(client, workdir)
+    with tempfile.TemporaryDirectory(prefix="loopgain-ex01-") as temporary:
+        workdir = Path(temporary)
+        (workdir / "test_solution.py").write_text(TESTS)
+        print(f"Workdir: {workdir}")
+        print("Spec:    format_duration — 15 parametrized test cases.\n")
+        baseline_err, baseline_iters = baseline_run(client, workdir)
     # Fresh workdir for the LoopGain run so the comparison is apples-to-apples.
-    workdir = Path(tempfile.mkdtemp(prefix="loopgain-ex01-lg-"))
-    (workdir / "test_solution.py").write_text(TESTS)
-    lg = loopgain_run(client, workdir)
+    with tempfile.TemporaryDirectory(prefix="loopgain-ex01-lg-") as temporary:
+        workdir = Path(temporary)
+        (workdir / "test_solution.py").write_text(TESTS)
+        lg = loopgain_run(client, workdir)
 
     print_comparison(baseline_iters, baseline_err, lg)
     send_telemetry(lg, workload_id=WORKLOAD_ID, loop_type="verify_revise")

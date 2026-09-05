@@ -42,6 +42,35 @@ Override the model via `LOOPGAIN_EXAMPLE_MODEL` (default `claude-haiku-4-5`).
 
 ---
 
+## Example 01 sandbox prerequisite
+
+Example 01 requires Docker on a POSIX host and a trusted local Python 3.12 image
+containing pytest. The default image is `loopgain-python-pytest:local`; select a
+different trusted image with `LOOPGAIN_SANDBOX_IMAGE`. Image preparation is a
+separate operator action. For example, use a Dockerfile with a trusted Python
+base and installed pytest, then tag it with the default name. Prepare or update
+that image before starting the example; the runtime never builds or pulls one.
+
+The example resolves the image to an immutable local ID and probes pytest with
+the actual isolation settings before creating a model client and before every
+model request. Missing Docker, image, pytest or failed cleanup stops the loop;
+there is no host execution fallback. Candidate/test files are staged read-only
+in a disposable non-root container with networking disabled, a read-only root,
+no host credentials or Docker socket, dropped capabilities, no-new-privileges,
+128 MiB memory, one CPU, 32 PIDs, 16 MiB `/tmp`, and bounded input/output and
+wall time. Containers and descendants are forcibly removed on every exit.
+External pytest plugins are disabled. Keep the image and Docker/kernel patched;
+containers are not a separate VM boundary. Python/runtime limits differ from
+older host execution, so do not compare historical measurements unchanged.
+
+Verify only the synthetic sandbox tests without provider/model calls:
+
+```bash
+LOOPGAIN_SANDBOX_INTEGRATION=1 python -m pytest tests/test_example_sandbox.py
+```
+
+The core `loopgain` package gains no runtime dependencies from this helper.
+
 ## Run
 
 ```bash
