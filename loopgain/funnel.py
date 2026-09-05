@@ -283,23 +283,28 @@ class Funnel:
             return _DISABLED
         return _UNDECIDED
 
-    # ----- Lazy load / one-time setup -----
+    # ----- Consent refresh / lazy setup -----
 
     def _ensure_loaded(self) -> str:
-        """Resolve mode and prepare state exactly once per process.
+        """Recheck consent and lazily prepare state when the mode changes.
 
-        Returns the resolved mode. In ``disabled`` mode nothing is read,
-        written, or shown. In ``undecided`` mode we ensure a state file with
+        Returns the resolved mode. In ``disabled`` mode no state is written
+        and no notice is shown. In ``undecided`` mode we ensure a state file with
         an instance id exists and show the one-time notice. In ``enabled``
         mode we additionally bump the session counter and arm the flush
         machinery.
         """
-        if self._loaded:
-            return self._mode  # type: ignore[return-value]
         with self._lock:
-            if self._loaded:
-                return self._mode  # type: ignore[return-value]
             mode = self._resolve_mode()
+            if self._loaded and mode == self._mode:
+                return mode
+            if self._loaded:
+                # Consent can change in another process (the telemetry CLI).
+                # Do not retain activity from before a decline for later opt-in.
+                self._queue.clear()
+                self._outcomes.clear()
+                self._adapter = None
+                self._session_started = False
             self._mode = mode
 
             if mode == _DISABLED:
@@ -349,6 +354,8 @@ class Funnel:
 
     def _enqueue(self, event: dict[str, Any]) -> None:
         with self._lock:
+            if self._ensure_loaded() != _ENABLED:
+                return
             self._queue.append(event)
         self._ensure_thread()
 
@@ -384,6 +391,8 @@ class Funnel:
         otherwise (including when there was nothing to send).
         """
         with self._lock:
+            if self._ensure_loaded() != _ENABLED:
+                return False
             if not self._queue:
                 return False
             pending = self._queue
@@ -418,7 +427,7 @@ class Funnel:
                 pass
 
     def _emit_session_summary(self) -> None:
-        if self._mode != _ENABLED or not self._session_started:
+        if self._ensure_loaded() != _ENABLED or not self._session_started:
             return
         event = self._base_event("session")
         event["session_seq"] = int(self._state.get("session_count", 0))
@@ -430,7 +439,7 @@ class Funnel:
     # ----- Public hooks (called from core / adapters) -----
     #
     # Each hook resolves consent through ``_ensure_loaded()`` rather than
-    # reading ``self._mode`` directly. Mode is resolved lazily and stays
+    # reading ``self._mode`` directly. Consent is rechecked on activity; mode stays
     # ``None`` until the first hook runs, so a bare comparison drops the record
     # whenever a hook happens to be the first one called. See GH #1.
 

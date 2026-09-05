@@ -59,6 +59,12 @@ Resolution order: `DO_NOT_TRACK` → `LOOPGAIN_TELEMETRY` → your saved choice
 environments (`CI`, `GITHUB_ACTIONS`, …) are auto-detected and declined
 silently — no notice, no data.
 
+Running processes recheck this choice on telemetry activity and before flushing
+a queued batch. An effective opt-out discards pending events and session counts;
+opting in again does not restore that discarded activity. No restart is required.
+This cannot recall a request that has already started. The resolution order above
+still applies, including an explicit `LOOPGAIN_TELEMETRY` environment setting.
+
 ### What is collected (only when you opt in)
 
 - A **random instance id** — a fresh `uuid4` generated and stored locally. It

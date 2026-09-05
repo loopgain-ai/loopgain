@@ -462,3 +462,91 @@ def test_cli_version_and_no_command(tmp_path, monkeypatch, capsys):
     assert __version__ in capsys.readouterr().out
     # No subcommand prints help and returns non-zero.
     assert cli.main([]) == 1
+
+
+@pytest.mark.parametrize("next_activity", ["flush", "observe", "outcome", "adapter", "exit"])
+def test_running_process_honors_external_opt_out(tmp_path, monkeypatch, next_activity):
+    """A separate CLI-like instance revokes consent; no queued/new data leaves."""
+    monkeypatch.delenv("LOOPGAIN_TELEMETRY", raising=False)
+    monkeypatch.delenv("DO_NOT_TRACK", raising=False)
+    cap = _Capture()
+    cli = _funnel(tmp_path, cap)
+    cli.set_consent(True)
+    running = _funnel(tmp_path, cap)
+    running.on_init()
+    running.note_adapter("before-decline")
+    running.note_outcome("TARGET_MET")
+    assert running._queue
+
+    cli.set_consent(False)
+    denied_state = (tmp_path / "funnel.json").read_bytes()
+    if next_activity == "observe":
+        running.on_first_observe()
+    elif next_activity == "outcome":
+        running.note_outcome("DIVERGING")
+    elif next_activity == "adapter":
+        running.note_adapter("after-decline")
+    elif next_activity == "exit":
+        running._on_exit()
+    else:
+        running.flush_now()
+    assert running.flush_now() is False
+    assert cap.batches == []
+    assert running._queue == []
+    assert running._outcomes == {}
+    assert running._adapter is None
+    assert (tmp_path / "funnel.json").read_bytes() == denied_state
+
+
+def test_runtime_environment_opt_out_discards_pending_batch(tmp_path, monkeypatch):
+    cap = _Capture()
+    running = _enabled(tmp_path, monkeypatch, cap)
+    running.on_init()
+    monkeypatch.setenv("DO_NOT_TRACK", "1")
+    assert running.flush_now() is False
+    running._on_exit()
+    assert cap.batches == []
+
+
+def test_reenable_never_sends_activity_discarded_on_decline(tmp_path, monkeypatch):
+    monkeypatch.delenv("LOOPGAIN_TELEMETRY", raising=False)
+    monkeypatch.delenv("DO_NOT_TRACK", raising=False)
+    cap = _Capture()
+    cli = _funnel(tmp_path, cap)
+    cli.set_consent(True)
+    running = _funnel(tmp_path, cap)
+    running.on_init()
+    running.note_adapter("old-adapter")
+    running.note_outcome("DIVERGING")
+    cli.set_consent(False)
+    running.flush_now()
+    cli.set_consent(True)
+    running.on_first_observe()
+    running._on_exit()
+    assert all(event["event"] != "first_init" for event in cap.events)
+    session = next(event for event in cap.events if event["event"] == "session")
+    assert session["adapter"] is None
+    assert "outcomes" not in session
+
+
+def test_empty_flush_discards_session_activity_on_external_opt_out(tmp_path, monkeypatch):
+    monkeypatch.delenv("LOOPGAIN_TELEMETRY", raising=False)
+    monkeypatch.delenv("DO_NOT_TRACK", raising=False)
+    cap = _Capture()
+    cli = _funnel(tmp_path, cap)
+    cli.set_consent(True)
+    running = _funnel(tmp_path, cap)
+    running.on_init()
+    assert running.flush_now() is True
+    running.note_adapter("before-decline")
+    running.note_outcome("DIVERGING")
+    assert running._queue == []
+
+    cli.set_consent(False)
+    assert running.flush_now() is False
+    cli.set_consent(True)
+    running._on_exit()
+
+    session = next(event for event in cap.events if event["event"] == "session")
+    assert session["adapter"] is None
+    assert "outcomes" not in session
