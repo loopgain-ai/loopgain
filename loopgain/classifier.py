@@ -208,6 +208,22 @@ def extract_features(error_history: Sequence[float]) -> TrajectoryFeatures:
     linear. This is the standard transformation for any signal that obeys
     Barkhausen's E_n = Aβ · E_{n−1}.
     """
+    return _extract_features(error_history, with_oscillation=True)
+
+
+def _oscillation_std(log_e: Sequence[float], slope: float) -> float:
+    """Preserve the exact public residual calculation and stdlib rounding."""
+    n = len(log_e)
+    xs = list(range(n))
+    intercept = sum(log_e) / n - slope * (sum(xs) / n)
+    residuals = [log_e[i] - (intercept + slope * xs[i]) for i in range(n)]
+    return statistics.pstdev(residuals)
+
+
+def _extract_features(
+    error_history: Sequence[float], *, with_oscillation: bool
+) -> TrajectoryFeatures:
+    """Compute trend features, optionally deferring the costly final gate."""
     n = len(error_history)
     if n == 0:
         return TrajectoryFeatures(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0)
@@ -233,13 +249,9 @@ def extract_features(error_history: Sequence[float]) -> TrajectoryFeatures:
     log_e = [math.log10(max(e, _EPS)) for e in error_history]
     slope, p = _ols_slope_and_p(xs, log_e)
 
-    # Detrended residual std (sample std).
-    intercept = sum(log_e) / n - slope * (sum(xs) / n)
-    residuals = [log_e[i] - (intercept + slope * xs[i]) for i in range(n)]
-    if n >= 2:
-        osc_std = statistics.pstdev(residuals)
-    else:
-        osc_std = 0.0
+    # Population std is only needed by the public feature API or the final
+    # oscillation gate. Keep statistics.pstdev's exact rounding semantics.
+    osc_std = _oscillation_std(log_e, slope) if with_oscillation else 0.0
 
     return TrajectoryFeatures(
         e_current=e_current,
@@ -294,7 +306,25 @@ def classify_trajectory(
     if n < 2:
         return INIT
 
-    f = extract_features(error_history)
+    # The public classifier historically exposes eager feature errors for
+    # non-finite inputs. Do not let a decisive ratio bypass those errors.
+    # Comparisons also avoid overflowing when the sequence contains a large
+    # finite Python integer that math.isfinite would coerce to float.
+    if any(not -math.inf < e < math.inf for e in error_history):
+        extract_features(error_history)
+
+    # With two observations only the cumulative ratio is used below. Avoid
+    # computing a regression and residual variance that cannot affect the
+    # verdict (there are no residual degrees of freedom).
+    if n == 2:
+        e_ratio = e_current / max(abs(error_history[0]), _EPS)
+        if e_ratio <= th.e_ratio_fast:
+            return FAST_CONVERGE
+        if e_ratio < 1.0:
+            return CONVERGING
+        if e_ratio > 1.0 + th.div_margin:
+            return DIVERGING
+        return STALLING
 
     # Liveness signal: how many iterations since the loop last achieved a new
     # best (lowest) error. A genuinely converging loop keeps hitting new lows,
@@ -304,32 +334,23 @@ def classify_trajectory(
     # loop has stopped improving, so it can reach STALLING / OSCILLATING and
     # terminate instead of riding its historical cumulative win forever. See
     # DEFAULT_STALL_PATIENCE.
-    hist = list(error_history)
-    iters_since_best = (n - 1) - hist.index(min(hist))
+    # Preserve first-tie semantics without keeping a second history list
+    # alive while extracting features.
+    e_min = min(error_history)
+    best_index = next(i for i, error in enumerate(error_history) if error == e_min)
+    iters_since_best = (n - 1) - best_index
     still_improving = iters_since_best < th.stall_patience
-
-    # n == 2 special case: with two observations, the slope is well defined
-    # but its p-value is not (zero residual degrees of freedom). Fall back to
-    # the sign of the change. This is the same conservatism as a Wilcoxon
-    # signed-rank test with n=1: insufficient evidence for a significance
-    # claim, but the *direction* is unambiguous.
-    if n == 2:
-        if f.e_ratio <= th.e_ratio_fast:
-            return FAST_CONVERGE
-        if f.e_ratio < 1.0:
-            return CONVERGING
-        if f.e_ratio > 1.0 + th.div_margin:
-            return DIVERGING
-        return STALLING
 
     # Order matters: FAST_CONVERGE precedes CONVERGING; both precede the
     # remaining gates. Both continue-verdicts are gated on `still_improving`:
     # a loop that has stopped hitting new lows is no longer "converging" no
     # matter how large its historical cumulative reduction was, and must be
     # allowed to fall through to STALLING / OSCILLATING so it can terminate.
-    if f.e_ratio <= th.e_ratio_fast and still_improving:
+    e_ratio = e_current / max(abs(error_history[0]), _EPS)
+    if e_ratio <= th.e_ratio_fast and still_improving:
         return FAST_CONVERGE
 
+    f = _extract_features(error_history, with_oscillation=False)
     slope_significant = f.slope_p < th.p_sig
 
     if (
@@ -342,8 +363,10 @@ def classify_trajectory(
     if f.slope_log > 0 and slope_significant and f.e_ratio > 1.0 + th.div_margin:
         return DIVERGING
 
-    if f.osc_std >= th.osc_std_threshold and abs(f.slope_log) < th.slope_tol:
-        return OSCILLATING
+    if abs(f.slope_log) < th.slope_tol:
+        log_e = [math.log10(max(e, _EPS)) for e in error_history]
+        if _oscillation_std(log_e, f.slope_log) >= th.osc_std_threshold:
+            return OSCILLATING
 
     return STALLING
 
