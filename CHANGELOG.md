@@ -6,6 +6,30 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.5] — 2026-09-30
+
+Backward-compatible library patch. The classifier's public features,
+thresholds, decisions, and numeric rounding are unchanged.
+
+- **Deferred classifier work** ([#20](https://github.com/loopgain-ai/loopgain/pull/20)).
+  Two-observation and decisive cumulative-ratio gates avoid unnecessary
+  regression. Residual population deviation is computed only when the
+  oscillation gate needs it. The public feature API remains eager and uses
+  the same exact `statistics.pstdev` calculation. Numeric extremes, custom
+  threshold boundaries, liveness, and non-finite exceptions are covered by
+  regression tests.
+- **Telemetry consent refresh** ([#17](https://github.com/loopgain-ai/loopgain/pull/17)).
+  Running processes recheck consent before recording or sending funnel
+  activity and discard pending session data when consent changes.
+- **Safer runnable examples** ([#18](https://github.com/loopgain-ai/loopgain/pull/18),
+  [#19](https://github.com/loopgain-ai/loopgain/pull/19)). SQL verification is
+  read-only. The generated-Python example requires an existing local Docker
+  sandbox image, with no host fallback or automatic image pull; see
+  `examples/README.md` for setup.
+- **Verification coverage**: CI checks Python 3.10–3.13, six offline real
+  framework integrations, lint, security, package metadata, and installed
+  wheels. The OpenAI Agents smoke test exercises a real offline Runner.
+
 ## [0.6.4] — 2026-07-26
 
 Two fixes in the opt-in funnel telemetry. No API change, no behaviour change
